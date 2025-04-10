@@ -66,7 +66,7 @@
 </div>
 
 <!-- Hidden form that submits when result is clicked -->
-<form action="" method="GET" id="ad-form">
+<form action="" target="_blank" method="GET" id="ad-form">
     <input type="hidden" name="gclid" id="gclid">
     <input type="hidden" name="campaignid" id="campaignid">
     <input type="hidden" name="AdId" id="AdId">
@@ -117,7 +117,7 @@
             div.className = 'result-item';
             div.innerHTML = `
                 <div class="result-url">${site.url}</div>
-                <a target="_blank" href="#">${site.title}</a>
+                <a href="#">${site.title}</a>
                 <div class="text-muted small">Simulated ad click to ${site.url}</div>
             `;
             div.querySelector('a').addEventListener('click', e => {
