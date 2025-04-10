@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <title>Google</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: Arial, sans-serif;
+        }
+        .search-bar {
+            padding: 20px;
+            border-bottom: 1px solid #333;
+        }
+        .search-input {
+            max-width: 700px;
+            margin: auto;
+        }
+        .results {
+            max-width: 700px;
+            margin: 30px auto;
+        }
+        .result-item {
+            margin-bottom: 30px;
+        }
+        .result-item a {
+            font-size: 18px;
+            color: #8ab4f8;
+            text-decoration: none;
+        }
+        .result-item a:hover {
+            text-decoration: underline;
+        }
+        .result-url {
+            color: #3cba54;
+            font-size: 14px;
+        }
+        #ad-form {
+            display: none;
+        }
+        #randomize {
+            max-width: 700px;
+            margin: 10px auto 30px auto;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Search bar -->
+<div class="search-bar">
+    <div class="search-input">
+        <input type="text" class="form-control form-control-lg" id="search" placeholder="Search Google or type a URL">
+    </div>
+</div>
+
+<!-- Randomize button -->
+<button type="button" class="btn btn-warning" id="randomize">🔀 Randomize Inputs</button>
+
+<!-- Fake search results -->
+<div class="results" id="results">
+    <!-- JS dolduracaq -->
+</div>
+
+<!-- Hidden form that submits when result is clicked -->
+<form action="" method="GET" id="ad-form">
+    <input type="hidden" name="gclid" id="gclid">
+    <input type="hidden" name="campaignid" id="campaignid">
+    <input type="hidden" name="AdId" id="AdId">
+    <input type="hidden" name="keyword" id="keyword">
+    <input type="hidden" name="matchtype" value="e">
+    <input type="hidden" name="device" id="device">
+    <input type="hidden" name="devicemodel" id="devicemodel">
+    <input type="hidden" name="loc" id="loc">
+    <input type="hidden" name="network" id="network">
+</form>
+
+<script>
+    const sites = [
+        { title: "[TEST] QR Code Generator", url: "https://qr.test.afea.dev" },
+        { title: "[DEV] QR Dev Platform", url: "https://qr.dev.afea.dev" },
+        { title: "[PREPROD] QR Preproduction", url: "https://qr.afea.dev" },
+        { title: "[PROD] QR Code Creator", url: "https://qrcodecreator.com" }
+    ];
+
+    const resultsDiv = document.getElementById('results');
+    const searchInput = document.getElementById('search');
+
+    function generateGclid() {
+        const start = ['Cj0K', 'CjwK'];
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+        const length = Math.floor(Math.random() * 20) + 50;
+        let result = start[Math.floor(Math.random() * start.length)];
+        while (result.length < length) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+    }
+
+    const getRandomId = () => Math.floor(Math.random() * 9e9 + 1e8);
+    const randomKeyword = () => {
+        const keywords = ["qr code generator", "dynamic qr", "scan qr", "qr for business", "pdf qr"];
+        return keywords[Math.floor(Math.random() * keywords.length)];
+    };
+    const randomModel = () => {
+        const models = ["iPhone 14 Pro", "Galaxy S23", "Pixel 8", "MacBook Pro", "iPad Air"];
+        return models[Math.floor(Math.random() * models.length)];
+    };
+
+    function populateResults() {
+        resultsDiv.innerHTML = '';
+        sites.forEach(site => {
+            const div = document.createElement('div');
+            div.className = 'result-item';
+            div.innerHTML = `
+                <div class="result-url">${site.url}</div>
+                <a href="#">${site.title}</a>
+                <div class="text-muted small">Simulated ad click to ${site.url}</div>
+            `;
+            div.querySelector('a').addEventListener('click', e => {
+                e.preventDefault();
+                submitFakeClick(site.url);
+            });
+            resultsDiv.appendChild(div);
+        });
+    }
+
+    function randomizeInputs() {
+        document.getElementById('gclid').value = generateGclid();
+        document.getElementById('campaignid').value = getRandomId();
+        document.getElementById('AdId').value = getRandomId();
+        document.getElementById('keyword').value = randomKeyword();
+        document.getElementById('device').value = ['c', 'm', 't'][Math.floor(Math.random() * 3)];
+        document.getElementById('devicemodel').value = randomModel();
+        document.getElementById('loc').value = Math.floor(Math.random() * 900000 + 100000);
+        document.getElementById('network').value = ['g', 'm'][Math.floor(Math.random() * 2)];
+    }
+
+    function submitFakeClick(url) {
+        const form = document.getElementById('ad-form');
+        form.setAttribute('action', url);
+        if (!document.getElementById('gclid').value) {
+            randomizeInputs(); // doldurulmayıbsa doldur
+        }
+        form.submit();
+    }
+
+    document.getElementById('randomize').addEventListener('click', () => {
+        randomizeInputs();
+        alert("Random values generated for form fields.");
+    });
+
+    searchInput.addEventListener('input', () => {
+        populateResults();
+    });
+
+    // Populate on first load
+    populateResults();
+</script>
+
+</body>
+</html>
