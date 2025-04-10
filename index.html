@@ -117,7 +117,7 @@
             div.className = 'result-item';
             div.innerHTML = `
                 <div class="result-url">${site.url}</div>
-                <a href="#">${site.title}</a>
+                <a target="_blank" href="#">${site.title}</a>
                 <div class="text-muted small">Simulated ad click to ${site.url}</div>
             `;
             div.querySelector('a').addEventListener('click', e => {
