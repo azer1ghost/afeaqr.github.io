@@ -2,36 +2,77 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Canvas Fingerprint</title>
+    <title>Fingerprint</title>
 </head>
 <body>
-    <h3>Bu cihazın fingerprint-i:</h3>
-    <div id="fingerprint"></div>
+    <h3>Unikal Fingerprint:</h3>
+    <div id="fp"></div>
 
     <script>
-        // Canvas elementi yaradırıq
-        function getCanvasFingerprint() {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            // Nümunə üçün bir mətn çəkək
-            ctx.font = '14px Arial';
-            ctx.fillText('Hello, fingerprint!', 10, 50);
+        async function getFingerprint() {
+            const canvasFp = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                ctx.textBaseline = "top";
+                ctx.font = "14px 'Arial'";
+                ctx.fillText("Hello Fingerprint!", 2, 2);
+                return canvas.toDataURL();
+            };
 
-            // Canvas-ın data-ını alırıq
-            const data = canvas.toDataURL();
+            const webglFp = () => {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (!gl) return "unsupported";
+                const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+                const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                return vendor + '|' + renderer;
+            };
 
-            // Sadə bir hash funksiyası ilə "fingerprint" yaradaq
-            let hash = 0;
-            for (let i = 0; i < data.length; i++) {
-                const char = data.charCodeAt(i);
-                hash = (hash << 5) - hash + char;
-                hash = hash & hash; // 32-bit integer kimi saxlayırıq
-            }
-            return hash.toString();
+            const audioFp = async () => {
+                try {
+                    const ctx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 44100, 44100);
+                    const osc = ctx.createOscillator();
+                    const comp = ctx.createDynamicsCompressor();
+                    osc.type = 'triangle';
+                    osc.frequency.value = 10000;
+                    osc.connect(comp);
+                    comp.connect(ctx.destination);
+                    osc.start(0);
+                    ctx.startRendering();
+                    const buffer = await ctx.startRendering();
+                    let sum = 0;
+                    for (let i = 0; i < buffer.length; i++) sum += Math.abs(buffer.getChannelData(0)[i]);
+                    return sum.toString();
+                } catch (e) {
+                    return "audio-fail";
+                }
+            };
+
+            const rawData = [
+                navigator.userAgent,
+                navigator.language,
+                Intl.DateTimeFormat().resolvedOptions().timeZone,
+                screen.width + "x" + screen.height,
+                screen.colorDepth,
+                navigator.hardwareConcurrency,
+                navigator.deviceMemory || 'unknown',
+                canvasFp(),
+                webglFp(),
+                await audioFp(),
+            ].join('|');
+
+            const encoder = new TextEncoder();
+            const data = encoder.encode(rawData);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            return hashHex;
         }
 
-        // Fingerprint-i HTML-in body hissəsinə əlavə edirik
-        document.getElementById('fingerprint').innerText = getCanvasFingerprint();
+        getFingerprint().then(fp => {
+            document.getElementById('fp').innerText = fp;
+        });
     </script>
 </body>
 </html>
