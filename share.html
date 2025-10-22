@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="az">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Şəkli fayl kimi paylaşıb göndər</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
+    button { padding: 10px 14px; border-radius: 10px; border: 1px solid #ccc; cursor: pointer; }
+    img { max-width: 260px; display:block; margin-bottom: 12px; }
+    .hint { color:#666; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+  <!-- Şəkil: Mümkünsə eyni domen + CORS açıq olsun -->
+  <img id="pic" src="https://example.com/path/to/photo.jpg" alt="Share image" crossorigin="anonymous"/>
+
+  <button id="shareBtn">Fayl kimi paylaş</button>
+  <p class="hint" id="status"></p>
+
+  <!-- Fallback: Web Share files dəstəklənmirsə yükləmə/link variantları -->
+  <div id="fallback" style="display:none; margin-top:10px;">
+    <a id="dl" download="photo.jpg">Şəkli yüklə (sonra əl ilə WhatsApp-a əlavə et)</a>
+    <br>
+    <a id="wa" target="_blank" rel="noopener">WhatsApp-a link göndər (fayl deyil)</a>
+  </div>
+
+<script>
+(async function () {
+  const img = document.getElementById('pic');
+  const btn = document.getElementById('shareBtn');
+  const status = document.getElementById('status');
+  const fallback = document.getElementById('fallback');
+  const dl = document.getElementById('dl');
+  const wa = document.getElementById('wa');
+
+  // Fallback linkləri hazırla
+  wa.href = 'https://wa.me/?text=' + encodeURIComponent(window.location.href);
+
+  // Şəkili fayla çevirən util (src-dən fetch → Blob → File)
+  async function imageToFile(imgEl) {
+    // Tam yüklənməyibsə gözlət
+    if (!imgEl.complete) await new Promise(r => { imgEl.onload = r; imgEl.onerror = r; });
+
+    const res = await fetch(imgEl.src, { mode: 'cors' });
+    if (!res.ok) throw new Error('Şəkli götürə bilmədim: ' + res.status);
+    const blob = await res.blob();
+
+    // Fayl uzantısını düzgün qoy
+    const ext = (blob.type && blob.type.includes('png')) ? 'png'
+               : (blob.type && blob.type.includes('webp')) ? 'webp'
+               : 'jpg';
+    const fileName = `shared-image.${ext}`;
+
+    // iOS paylaşımda "File" obyektini və doğru MIME-i sevir
+    return new File([blob], fileName, { type: blob.type || 'image/jpeg', lastModified: Date.now() });
+  }
+
+  // Dəstək yoxlanışı (files üçün)
+  async function canShareFilesWith(file) {
+    if (!('share' in navigator)) return false;
+    if ('canShare' in navigator) {
+      try { return navigator.canShare({ files: [file] }); }
+      catch { return false; }
+    }
+    // Köhnə brauzer—files üçün dəqiq deyə bilmirik
+    return false;
+  }
+
+  // Paylaş düyməsi
+  btn.addEventListener('click', async () => {
+    status.textContent = '';
+    try {
+      const file = await imageToFile(img);
+      const ok = await canShareFilesWith(file);
+
+      if (!ok) {
+        // Fallback göstər
+        const blobUrl = URL.createObjectURL(file);
+        dl.href = blobUrl;
+        fallback.style.display = 'block';
+        status.textContent = 'Bu mühitdə fayl kimi paylaşım dəstəklənmir. Fallback aktivdir.';
+        return;
+      }
+
+      await navigator.share({
+        files: [file],
+        title: 'Şəkil',
+        text: '' // Boş saxlayın ki, bəzi app-lər URL-ə üstünlük verməsin
+      });
+
+      status.textContent = 'Paylaşıldı ✅';
+    } catch (err) {
+      console.error(err);
+      status.textContent = 'Paylaşım alınmadı: ' + (err.message || err);
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
