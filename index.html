@@ -79,86 +79,112 @@
 </form>
 
 <script>
-    const sites = [
-        { title: "[TEST] QR Code Generator", url: "https://qr.test.afea.dev" },
-        { title: "[DEV] QR Dev Platform", url: "https://qr.dev.afea.dev" },
-        { title: "[PREPROD] QR Preproduction", url: "https://qr.afea.dev" },
-        { title: "[PROD] QR Code Creator", url: "https://qrcodecreator.com" }
-    ];
+  const sites = [
+    { id: "test", title: "[TEST] QR Code Generator", url: "https://qr.test.afea.dev" },
+    { id: "dev", title: "[DEV] QR Dev Platform", url: "https://qr.dev.afea.dev" },
+    { id: "preprod", title: "[PREPROD] QR Preproduction", url: "https://qr.afea.dev" },
+    { id: "prod", title: "[PROD] QR Code Creator", url: "https://qrcodecreator.com" }
+  ];
 
-    const resultsDiv = document.getElementById('results');
-    const searchInput = document.getElementById('search');
+  const resultsDiv = document.getElementById('results');
+  const searchInput = document.getElementById('search');
 
-    function generateGclid() {
-        const start = ['Cj0K', 'CjwK'];
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
-        const length = Math.floor(Math.random() * 20) + 50;
-        let result = start[Math.floor(Math.random() * start.length)];
-        while (result.length < length) {
-            result += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return result;
+  function generateGclid() {
+    const start = ['Cj0K', 'CjwK'];
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    const length = Math.floor(Math.random() * 20) + 50;
+    let result = start[Math.floor(Math.random() * start.length)];
+    while (result.length < length) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
+    return result;
+  }
 
-    const getRandomId = () => Math.floor(Math.random() * 9e9 + 1e8);
-    const randomKeyword = () => {
-        const keywords = ["qr code generator", "dynamic qr", "scan qr", "qr for business", "pdf qr"];
-        return keywords[Math.floor(Math.random() * keywords.length)];
-    };
-    const randomModel = () => {
-        const models = ["iPhone 14 Pro", "Galaxy S23", "Pixel 8", "MacBook Pro", "iPad Air"];
-        return models[Math.floor(Math.random() * models.length)];
-    };
+  const getRandomId = () => Math.floor(Math.random() * 9e9 + 1e8);
 
-    function populateResults() {
-        resultsDiv.innerHTML = '';
-        sites.forEach(site => {
-            const div = document.createElement('div');
-            div.className = 'result-item';
-            div.innerHTML = `
-                <div class="result-url">${site.url}</div>
-                <a href="#">${site.title}</a>
-                <div class="text-muted small">Simulated ad click to ${site.url}</div>
-            `;
-            div.querySelector('a').addEventListener('click', e => {
-                e.preventDefault();
-                submitFakeClick(site.url);
-            });
-            resultsDiv.appendChild(div);
-        });
-    }
+  const randomKeyword = () => {
+    const keywords = ["qr code generator", "dynamic qr", "scan qr", "qr for business", "pdf qr"];
+    return keywords[Math.floor(Math.random() * keywords.length)];
+  };
 
-    function randomizeInputs() {
-        document.getElementById('gclid').value = generateGclid();
-        document.getElementById('campaignid').value = getRandomId();
-        document.getElementById('AdId').value = getRandomId();
-        document.getElementById('keyword').value = randomKeyword();
-        document.getElementById('device').value = ['c', 'm', 't'][Math.floor(Math.random() * 3)];
-        document.getElementById('devicemodel').value = randomModel();
-        document.getElementById('loc').value = Math.floor(Math.random() * 900000 + 100000);
-        document.getElementById('network').value = ['g', 'm'][Math.floor(Math.random() * 2)];
-    }
+  const randomModel = () => {
+    const models = ["iPhone 14 Pro", "Galaxy S23", "Pixel 8", "MacBook Pro", "iPad Air"];
+    return models[Math.floor(Math.random() * models.length)];
+  };
 
-    function submitFakeClick(url) {
-        const form = document.getElementById('ad-form');
-        form.setAttribute('action', url);
-        if (!document.getElementById('gclid').value) {
-            randomizeInputs(); // doldurulmayıbsa doldur
-        }
-        form.submit();
-    }
+  function getLangFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    const lang = (params.get('lang') || '').trim();
+    if (!/^[a-zA-Z0-9-]{2,10}$/.test(lang)) return null; // e.g. es, en, pt-BR
+    return lang;
+  }
 
-    document.getElementById('randomize').addEventListener('click', () => {
-        randomizeInputs();
-        alert("Random values generated for form fields.");
+  function buildActionUrlWithLang(baseUrl) {
+    const lang = getLangFromQuery();
+    if (!lang) return baseUrl;
+
+    const u = new URL(baseUrl);
+    const cleanPath = u.pathname.replace(/\/+$/, '');
+    u.pathname = `${cleanPath}/${lang}`;
+    return u.toString();
+  }
+
+  function populateResults() {
+    resultsDiv.innerHTML = '';
+
+    sites.forEach(site => {
+      const div = document.createElement('div');
+      div.className = 'result-item';
+      div.innerHTML = `
+        <div class="result-url">${site.url}</div>
+        <a href="#" id="link-${site.id}">${site.title}</a>
+        <div class="text-muted small">Simulated ad click to ${site.url}</div>
+      `;
+
+      div.querySelector('a').addEventListener('click', e => {
+        e.preventDefault();
+        submitFakeClick(site.url);
+      });
+
+      resultsDiv.appendChild(div);
     });
+  }
 
-    searchInput.addEventListener('input', () => {
-        populateResults();
-    });
+  function randomizeInputs() {
+    document.getElementById('gclid').value = generateGclid();
+    document.getElementById('campaignid').value = getRandomId();
+    document.getElementById('AdId').value = getRandomId();
+    document.getElementById('keyword').value = randomKeyword();
+    document.getElementById('device').value = ['c', 'm', 't'][Math.floor(Math.random() * 3)];
+    document.getElementById('devicemodel').value = randomModel();
+    document.getElementById('loc').value = Math.floor(Math.random() * 900000 + 100000);
+    document.getElementById('network').value = ['g', 'm'][Math.floor(Math.random() * 2)];
+  }
 
-    // Populate on first load
+  function submitFakeClick(url) {
+    const form = document.getElementById('ad-form');
+
+    const actionUrl = buildActionUrlWithLang(url);
+    form.setAttribute('action', actionUrl);
+
+    if (!document.getElementById('gclid').value) {
+      randomizeInputs();
+    }
+
+    form.submit();
+  }
+
+  document.getElementById('randomize').addEventListener('click', () => {
+    randomizeInputs();
+    alert("Random values generated for form fields.");
+  });
+
+  searchInput.addEventListener('input', () => {
     populateResults();
+  });
+
+  // Populate on first load
+  populateResults();
 </script>
 
 </body>
