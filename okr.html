@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="az" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q2 2026 OKR Presentation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: #0a0a0f; color: #e2e8f0; overflow: hidden; }
+
+        .slide { display: none; min-height: 100vh; padding: 3rem 5rem; position: relative; }
+        .slide.active { display: flex; flex-direction: column; justify-content: center; animation: fadeIn 0.45s ease; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideInLeft { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.7; } }
+
+        .animate-in > * { animation: slideInLeft 0.5s ease forwards; opacity: 0; }
+        .animate-in > *:nth-child(1) { animation-delay: 0.05s; }
+        .animate-in > *:nth-child(2) { animation-delay: 0.15s; }
+        .animate-in > *:nth-child(3) { animation-delay: 0.25s; }
+        .animate-in > *:nth-child(4) { animation-delay: 0.35s; }
+        .animate-in > *:nth-child(5) { animation-delay: 0.45s; }
+
+        .glow-blue { box-shadow: 0 0 40px rgba(59, 130, 246, 0.12); }
+        .glow-emerald { box-shadow: 0 0 40px rgba(16, 185, 129, 0.12); }
+        .glow-violet { box-shadow: 0 0 40px rgba(139, 92, 246, 0.12); }
+        .glow-amber { box-shadow: 0 0 40px rgba(245, 158, 11, 0.12); }
+
+        .bg-grid {
+            background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0);
+            background-size: 40px 40px;
+        }
+
+        .gradient-text-blue { background: linear-gradient(135deg, #60a5fa, #3b82f6, #2563eb); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .gradient-text-emerald { background: linear-gradient(135deg, #6ee7b7, #10b981, #059669); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .gradient-text-violet { background: linear-gradient(135deg, #c4b5fd, #8b5cf6, #7c3aed); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .gradient-text-amber { background: linear-gradient(135deg, #fcd34d, #f59e0b, #d97706); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+        .kr-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 20px;
+            padding: 2.5rem 3rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .progress-bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.06); overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 3px; transition: width 1.2s ease; }
+
+        .nav-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.12); cursor: pointer; transition: all 0.3s; }
+        .nav-dot.active { background: #3b82f6; width: 20px; border-radius: 4px; }
+        .nav-dot:hover { background: rgba(255,255,255,0.35); }
+
+        .tag { display: inline-block; padding: 4px 12px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+
+        .blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(90px);
+            opacity: 0.12;
+            animation: pulse 8s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        .big-number {
+            font-size: 5rem;
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: -0.03em;
+        }
+
+        .scenario-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 20px;
+            padding: 2.5rem 3rem;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        .scenario-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.15); }
+
+        kbd {
+            display: inline-block; padding: 2px 8px; font-size: 0.7rem;
+            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 4px; font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-grid">
+
+    <!-- Slide 0: Title -->
+    <div class="slide active" id="slide-0">
+        <div class="blob w-96 h-96 bg-blue-500" style="top: -100px; right: -100px;"></div>
+        <div class="blob w-72 h-72 bg-violet-500" style="bottom: -50px; left: -50px; animation-delay: 3s;"></div>
+        <div class="animate-in max-w-4xl">
+            <div><span class="tag bg-blue-500/10 text-blue-400 border border-blue-500/20">Q2 2026</span></div>
+            <h1 class="text-6xl font-800 mt-6 leading-tight tracking-tight">
+                <span class="gradient-text-blue">OKR</span>
+                <span class="text-white/90"> Presentation</span>
+            </h1>
+            <p class="text-xl text-white/40 mt-4 font-light max-w-2xl leading-relaxed">Maliyyə dəqiqliyi, sistem sürəti və infrastruktur dayanıqlığı</p>
+            <div class="flex items-center gap-3 mt-10">
+                <div class="w-10 h-[1px] bg-white/20"></div>
+                <span class="text-xs text-white/30 tracking-widest uppercase">3 Objective &middot; 10 Key Result</span>
+            </div>
+        </div>
+        <div class="absolute bottom-16 left-1/2 -translate-x-1/2 text-white/20 text-xs flex items-center gap-2">
+            <kbd>&larr;</kbd> <kbd>&rarr;</kbd> <span>naviqasiya</span>
+        </div>
+    </div>
+
+    <!-- Slide 1: Obj 1 Title -->
+    <div class="slide" id="slide-1">
+        <div class="blob w-80 h-80 bg-emerald-500" style="top: 50px; right: -80px;"></div>
+        <div class="animate-in max-w-4xl">
+            <div><span class="tag bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Objective 1</span></div>
+            <h2 class="text-5xl font-700 mt-5 leading-tight">
+                <span class="gradient-text-emerald">Maliyyə Arxitekturası</span><br>
+                <span class="text-white/80">və Strateji İnteqrasiyalar</span>
+            </h2>
+            <p class="text-lg text-white/40 mt-5 font-light max-w-2xl leading-relaxed">
+                Fokus: Hesablama dəqiqliyi, ödəniş kanallarının genişləndirilməsi və xərclərin azaldılması.
+            </p>
+            <div class="flex items-center gap-3 mt-10">
+                <div class="w-10 h-[1px] bg-emerald-500/30"></div>
+                <span class="text-xs text-white/30 tracking-widest uppercase">3 Key Results</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 2: Obj1 KR1 -->
+    <div class="slide" id="slide-2">
+        <div class="blob w-72 h-72 bg-emerald-500" style="bottom: -40px; right: 10%;"></div>
+        <div class="animate-in max-w-3xl">
+            <div class="flex items-center gap-3">
+                <span class="tag bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Obj 1</span>
+                <span class="tag bg-white/5 text-white/40 border border-white/10">KR 1</span>
+            </div>
+            <div class="kr-card glow-emerald mt-8">
+                <div class="big-number gradient-text-emerald mb-4">0%</div>
+                <p class="text-xs text-emerald-400/60 font-semibold tracking-widest uppercase mb-4">Hesablama xətası hədəfi</p>
+                <p class="text-xl text-white/80 leading-relaxed">
+                    Yeni "Payment Fee" arxitekturasının <span class="text-emerald-400 font-semibold">100%</span> tətbiqi ilə hesablama xətalarının <span class="text-emerald-400 font-semibold">0%-ə</span> endirilməsi.
+                </p>
+                <div class="progress-bar mt-8">
+                    <div class="progress-fill bg-gradient-to-r from-emerald-500 to-emerald-400" style="width: 0%" data-width="100"></div>
+                </div>
+                <div class="flex justify-between mt-2 text-xs text-white/20">
+                    <span>0%</span><span>100%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 3: Obj1 KR2 -->
+    <div class="slide" id="slide-3">
+        <div class="blob w-72 h-72 bg-emerald-500" style="top: -40px; left: 10%;"></div>
+        <div class="animate-in max-w-3xl">
+            <div class="flex items-center gap-3">
+                <span class="tag bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Obj 1</span>
+                <span class="tag bg-white/5 text-white/40 border border-white/10">KR 2</span>
+            </div>
+            <div class="kr-card glow-emerald mt-8">
+                <div class="big-number gradient-text-emerald mb-4">$20K</div>
+                <p class="text-xs text-emerald-400/60 font-semibold tracking-widest uppercase mb-4">İllik qənaət</p>
+                <p class="text-xl text-white/80 leading-relaxed">
+                    Spreedly Cleanup loqikasının icrası ilə lazımsız kart bazasının <span class="text-emerald-400 font-semibold">80%</span> təmizlənməsi (İllik <span class="text-emerald-400 font-semibold">$20,000</span> qənaət).
+                </p>
+                <div class="progress-bar mt-8">
+                    <div class="progress-fill bg-gradient-to-r from-emerald-500 to-emerald-400" style="width: 0%" data-width="80"></div>
+                </div>
+                <div class="flex justify-between mt-2 text-xs text-white/20">
+                    <span>0%</span><span>80%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 4: Obj1 KR3 -->
+    <div class="slide" id="slide-4">
+        <div class="blob w-72 h-72 bg-emerald-500" style="bottom: 10%; right: -40px;"></div>
+        <div class="animate-in max-w-3xl">
+            <div class="flex items-center gap-3">
+                <span class="tag bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Obj 1</span>
+                <span class="tag bg-white/5 text-white/40 border border-white/10">KR 3</span>
+            </div>
+            <div class="kr-card glow-emerald mt-8">
+                <div class="big-number gradient-text-emerald mb-4">PSP</div>
+                <p class="text-xs text-emerald-400/60 font-semibold tracking-widest uppercase mb-4">Tam azadlıq</p>
+                <p class="text-xl text-white/80 leading-relaxed">
+                    Planet PSP və Trust Payment inteqrasiyalarının tamamlanması – Bununla da <span class="text-emerald-400 font-semibold">PSP asılılığından tam azad olmaq</span>.
+                </p>
+                <div class="progress-bar mt-8">
+                    <div class="progress-fill bg-gradient-to-r from-emerald-500 to-emerald-400" style="width: 0%" data-width="100"></div>
+                </div>
+                <div class="flex justify-between mt-2 text-xs text-white/20">
+                    <span>0%</span><span>100%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 5: Obj 2 Title -->
+    <div class="slide" id="slide-5">
+        <div class="blob w-80 h-80 bg-violet-500" style="bottom: 50px; left: -80px;"></div>
+        <div class="animate-in max-w-4xl">
+            <div><span class="tag bg-violet-500/10 text-violet-400 border border-violet-500/20">Objective 2</span></div>
+            <h2 class="text-5xl font-700 mt-5 leading-tight">
+                <span class="gradient-text-violet">Admin V2 Transformasiyası</span><br>
+                <span class="text-white/80">və Sistem Çevikliyi</span>
+            </h2>
+            <p class="text-lg text-white/40 mt-5 font-light max-w-2xl leading-relaxed">
+                Fokus: Monolitdən qurtulmaq və yeni bazarlara/brand-lara ildırım sürəti ilə keçid.
+            </p>
+            <div class="flex items-center gap-3 mt-10">
+                <div class="w-10 h-[1px] bg-violet-500/30"></div>
+                <span class="text-xs text-white/30 tracking-widest uppercase">4 Key Results</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 6: Obj2 KR1 -->
+    <div class="slide" id="slide-6">
+        <div class="blob w-72 h-72 bg-violet-500" style="top: -40px; right: 15%;"></div>
+        <div class="animate-in max-w-3xl">
+            <div class="flex items-center gap-3">
+                <span class="tag bg-violet-500/10 text-violet-400 border border-violet-500/20">Obj 2</span>
+                <span class="tag bg-white/5 text-white/40 border border-white/10">KR 1</span>
+            </div>
+            <div class="kr-card glow-violet mt-8">
+                <div class="big-number gradient-text-violet mb-4">100%</div>
+                <p class="text-xs text-violet-400/60 font-semibold tracking-widest uppercase mb-4">Admin kod təmizliyi</p>
+                <p class="text-xl text-white/80 leading-relaxed">
+                    Admin kodlarının əsas App-dən <span class="text-violet-400 font-semibold">100%</span> təmizlənməsi – Nəticədə <span class="text-violet-400 font-semibold">50%</span> sistem optimallaşdırılması.
+                </p>
+                <div class="progress-bar mt-8">
+                    <div class="progress-fill bg-gradient-to-r from-violet-500 to-violet-400" style="width: 0%" data-width="100"></div>
+                </div>
+                <div class="flex justify-between mt-2 text-xs text-white/20">
+                    <span>0%</span><span>100%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 7: Obj2 KR2 -->
+    <div class="slide" id="slide-7">
+        <div class="blob w-72 h-72 bg-violet-500" style="bottom: -40px; left: 10%;"></div>
+        <div class="animate-in max-w-3xl">
+            <div class="flex items-center gap-3">
+                <span class="tag bg-violet-500/10 text-violet-400 border border-violet-500/20">Obj 2</span>
+                <span class="tag bg-white/5 text-white/40 border border-white/10">KR 2</span>
+            </div>
+            <div class="kr-card glow-violet mt-8">
+                <div class="flex items-end gap-3 mb-4">
+                    <span class="big-number text-white/15 line-through" style="font-size:3.5rem;">Günlər</span>
+                    <svg class="w-8 h-8 text-violet-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+                    <span class="big-number gradient-text-violet" style="font-size:3.5rem;">Saatlar</span>
+                </div>
+                <p class="text-xs text-violet-400/60 font-semibold tracking-widest uppercase mb-4">Deploy sürəti</p>
+                <p class="text-xl text-white/80 leading-relaxed">
+                    Yeni brand-lərin deploy edilmə müddətinin <span class="text-violet-400 font-semibold">günlərdən saatlara</span> endirilməsi.
+                </p>
+                <div class="progress-bar mt-8">
+                    <div class="progress-fill bg-gradient-to-r from-violet-500 to-violet-400" style="width: 0%" data-width="100"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 8: Obj2 KR3 -->
+    <div class="slide" id="slide-8">
+        <div class="blob w-72 h-72 bg-violet-500" style="top: 10%; right: -40px;"></div>
+        <div class="animate-in max-w-3xl">
+            <div class="flex items-center gap-3">
+                <span class="tag bg-violet-500/10 text-violet-400 border border-violet-500/20">Obj 2</span>
+                <span class="tag bg-white/5 text-white/40 border border-white/10">KR 3</span>
+            </div>
+            <div class="kr-card glow-violet mt-8">
+                <div class="big-number gradient-text-violet mb-4">60%</div>
+                <p class="text-xs text-violet-400/60 font-semibold tracking-widest uppercase mb-4">Yeni panelə köçürülüb</p>
+                <p class="text-xl text-white/80 leading-relaxed">
+                    Adminlərin artıq <span class="text-violet-400 font-semibold">60%-i</span> yeni panelə köçürülüb; Q2-nin ilk ayının sonunda köhnə panelin tam (<span class="text-violet-400 font-semibold">100%</span>) bağlanması.
+                </p>
+                <div class="progress-bar mt-8">
+                    <div class="progress-fill bg-gradient-to-r from-violet-500 to-violet-400" style="width: 0%" data-width="60"></div>
+                </div>
+                <div class="flex justify-between mt-2 text-xs text-white/20">
+                    <span>0%</span><span>60% &rarr; 100%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 9: Obj2 KR4 -->
+    <div class="slide" id="slide-9">
+        <div class="blob w-72 h-72 bg-violet-500" style="bottom: 10%; left: -40px;"></div>
+        <div class="animate-in max-w-3xl">
+            <div class="flex items-center gap-3">
+                <span class="tag bg-violet-500/10 text-violet-400 border border-violet-500/20">Obj 2</span>
+                <span class="tag bg-white/5 text-white/40 border border-white/10">KR 4</span>
+            </div>
+            <div class="kr-card glow-violet mt-8">
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="big-number gradient-text-violet" style="font-size: 3rem;">Multi-brand</div>
+                </div>
+                <p class="text-xs text-violet-400/60 font-semibold tracking-widest uppercase mb-4">Mərkəzləşdirilmiş idarəetmə</p>
+                <p class="text-xl text-white/80 leading-relaxed">
+                    Tək mərkəzdən <span class="text-violet-400 font-semibold">Multi-brand idarəetmə</span> və <span class="text-violet-400 font-semibold">Advanced Role Management</span> sisteminin aktivləşdirilməsi.
+                </p>
+                <div class="progress-bar mt-8">
+                    <div class="progress-fill bg-gradient-to-r from-violet-500 to-violet-400" style="width: 0%" data-width="100"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 10: Obj 3 Title -->
+    <div class="slide" id="slide-10">
+        <div class="blob w-80 h-80 bg-amber-500" style="top: -60px; left: 50%;"></div>
+        <div class="animate-in max-w-4xl">
+            <div><span class="tag bg-amber-500/10 text-amber-400 border border-amber-500/20">Objective 3</span></div>
+            <h2 class="text-5xl font-700 mt-5 leading-tight">
+                <span class="gradient-text-amber">İnfrastruktur Dayanıqlığı,</span><br>
+                <span class="text-white/80">Təhlükəsizlik və Data</span>
+            </h2>
+            <p class="text-lg text-white/40 mt-5 font-light max-w-2xl leading-relaxed">
+                Fokus: Sistemin yük altında dözümlülüyü, risklərin azaldılması və data bütövlüyü.
+            </p>
+            <div class="flex items-center gap-3 mt-10">
+                <div class="w-10 h-[1px] bg-amber-500/30"></div>
+                <span class="text-xs text-white/30 tracking-widest uppercase">3 Key Results</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 11: Obj3 KR1 -->
+    <div class="slide" id="slide-11">
+        <div class="blob w-72 h-72 bg-rose-500" style="top: -40px; right: 15%;"></div>
+        <div class="animate-in max-w-3xl">
+            <div class="flex items-center gap-3">
+                <span class="tag bg-amber-500/10 text-amber-400 border border-amber-500/20">Obj 3</span>
+                <span class="tag bg-white/5 text-white/40 border border-white/10">KR 1</span>
+                <span class="tag bg-rose-500/10 text-rose-400 border border-rose-500/20">Security & Risk</span>
+            </div>
+            <div class="kr-card glow-amber mt-8">
+                <div class="flex items-center gap-3 mb-4">
+                    <svg class="w-12 h-12 text-amber-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    <div class="big-number gradient-text-amber" style="font-size: 2.5rem;">Mikroxidmət</div>
+                </div>
+                <p class="text-xs text-amber-400/60 font-semibold tracking-widest uppercase mb-4">Phishing Detection izolyasiyası</p>
+                <p class="text-xl text-white/80 leading-relaxed">
+                    URL Phishing Detection-ın <span class="text-amber-400 font-semibold">mikroservisə daşınması</span> – Riskli funksionallığın izolyasiyası və resurs xərclərinin optimallaşdırılması.
+                </p>
+                <div class="progress-bar mt-8">
+                    <div class="progress-fill bg-gradient-to-r from-amber-500 to-amber-400" style="width: 0%" data-width="100"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 12: Obj3 KR2 -->
+    <div class="slide" id="slide-12">
+        <div class="blob w-72 h-72 bg-blue-500" style="bottom: -40px; left: 10%;"></div>
+        <div class="animate-in max-w-3xl">
+            <div class="flex items-center gap-3">
+                <span class="tag bg-amber-500/10 text-amber-400 border border-amber-500/20">Obj 3</span>
+                <span class="tag bg-white/5 text-white/40 border border-white/10">KR 2</span>
+                <span class="tag bg-blue-500/10 text-blue-400 border border-blue-500/20">Reliability</span>
+            </div>
+            <div class="kr-card glow-amber mt-8">
+                <div class="flex items-center gap-3 mb-4">
+                    <svg class="w-12 h-12 text-amber-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    <div class="big-number gradient-text-amber" style="font-size: 2.5rem;">Cloudflare</div>
+                </div>
+                <p class="text-xs text-amber-400/60 font-semibold tracking-widest uppercase mb-4">Scan Workers optimallaşdırılması</p>
+                <p class="text-xl text-white/80 leading-relaxed">
+                    Cloudflare Scan Workers optimallaşdırılması – QR status <span class="text-amber-400 font-semibold">latency-nin azaldılması</span> və <span class="text-amber-400 font-semibold">Auto-retry/Fail-over</span> mexanizminin qurulması.
+                </p>
+                <div class="progress-bar mt-8">
+                    <div class="progress-fill bg-gradient-to-r from-amber-500 to-amber-400" style="width: 0%" data-width="100"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 13: Obj3 KR3 -->
+    <div class="slide" id="slide-13">
+        <div class="blob w-72 h-72 bg-emerald-500" style="top: 10%; right: -40px;"></div>
+        <div class="animate-in max-w-3xl">
+            <div class="flex items-center gap-3">
+                <span class="tag bg-amber-500/10 text-amber-400 border border-amber-500/20">Obj 3</span>
+                <span class="tag bg-white/5 text-white/40 border border-white/10">KR 3</span>
+                <span class="tag bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Data Integrity</span>
+            </div>
+            <div class="kr-card glow-amber mt-8">
+                <div class="big-number gradient-text-amber mb-4">DWH</div>
+                <p class="text-xs text-amber-400/60 font-semibold tracking-widest uppercase mb-4">Historical Tables</p>
+                <p class="text-xl text-white/80 leading-relaxed">
+                    DWH Historical Tables setup – Tarixi datanın hesabatlılıq üçün <span class="text-amber-400 font-semibold">100%</span> hazır vəziyyətə gətirilməsi.
+                </p>
+                <div class="progress-bar mt-8">
+                    <div class="progress-fill bg-gradient-to-r from-amber-500 to-amber-400" style="width: 0%" data-width="100"></div>
+                </div>
+                <div class="flex justify-between mt-2 text-xs text-white/20">
+                    <span>0%</span><span>100%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 14: Talking Point - Maliyyə -->
+    <div class="slide" id="slide-14">
+        <div class="blob w-72 h-72 bg-emerald-500" style="top: -60px; left: -40px;"></div>
+        <div class="animate-in max-w-3xl mx-auto text-center">
+            <div><span class="tag bg-white/5 text-white/50 border border-white/10">Talking Point</span></div>
+            <div class="scenario-card mt-8" style="border-top: 3px solid rgba(16, 185, 129, 0.5);">
+                <div class="flex items-center justify-center gap-3 mb-6">
+                    <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
+                        <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <span class="text-emerald-400 font-semibold tracking-wide">Maliyyə Ssenarisi</span>
+                </div>
+                <p class="text-2xl text-white/80 leading-relaxed italic">
+                    "Biz həm pul itkisinin (<span class="text-emerald-400 font-semibold">0% xəta</span>) qarşısını alırıq, həm də illik <span class="text-emerald-400 font-semibold">$20,000</span> lazımsız Spreedly xərcini kəsirik."
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 15: Talking Point - Sürət -->
+    <div class="slide" id="slide-15">
+        <div class="blob w-72 h-72 bg-violet-500" style="bottom: -60px; right: -40px;"></div>
+        <div class="animate-in max-w-3xl mx-auto text-center">
+            <div><span class="tag bg-white/5 text-white/50 border border-white/10">Talking Point</span></div>
+            <div class="scenario-card mt-8" style="border-top: 3px solid rgba(139, 92, 246, 0.5);">
+                <div class="flex items-center justify-center gap-3 mb-6">
+                    <div class="w-12 h-12 rounded-2xl bg-violet-500/10 flex items-center justify-center">
+                        <svg class="w-6 h-6 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    </div>
+                    <span class="text-violet-400 font-semibold tracking-wide">Sürət Ssenarisi</span>
+                </div>
+                <p class="text-2xl text-white/80 leading-relaxed italic">
+                    "Admin V2 ilə backend artıq 'monolit' deyil. Yeni brand-ləri <span class="text-violet-400 font-semibold">günlərlə deyil, saatlar içində</span> ayağa qaldırırıq."
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 16: Talking Point - Təhlükəsizlik -->
+    <div class="slide" id="slide-16">
+        <div class="blob w-72 h-72 bg-amber-500" style="top: -60px; right: -40px;"></div>
+        <div class="animate-in max-w-3xl mx-auto text-center">
+            <div><span class="tag bg-white/5 text-white/50 border border-white/10">Talking Point</span></div>
+            <div class="scenario-card mt-8" style="border-top: 3px solid rgba(245, 158, 11, 0.5);">
+                <div class="flex items-center justify-center gap-3 mb-6">
+                    <div class="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center">
+                        <svg class="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    </div>
+                    <span class="text-amber-400 font-semibold tracking-wide">Təhlükəsizlik Ssenarisi</span>
+                </div>
+                <p class="text-2xl text-white/80 leading-relaxed italic">
+                    "URL Phishing Detection-ı mikroxidmətə keçirməklə, həm əsas sistemin <span class="text-amber-400 font-semibold">riskini azaldırıq</span>, həm də yüksək resurs tələb edən bu funksiyanı daha <span class="text-amber-400 font-semibold">ucuz və performanslı</span> idarə edirik."
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-white/5 backdrop-blur-xl px-4 py-2.5 rounded-full border border-white/10 z-50">
+        <button onclick="prevSlide()" class="text-white/40 hover:text-white/80 transition p-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="flex gap-1.5" id="nav-dots"></div>
+        <button onclick="nextSlide()" class="text-white/40 hover:text-white/80 transition p-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        </button>
+        <div class="w-[1px] h-4 bg-white/10 mx-1"></div>
+        <span class="text-xs text-white/30 tabular-nums" id="slide-counter">1 / 17</span>
+    </div>
+
+    <script>
+        let current = 0;
+        const slides = document.querySelectorAll('.slide');
+        const total = slides.length;
+        const dotsContainer = document.getElementById('nav-dots');
+        const counter = document.getElementById('slide-counter');
+
+        for (let i = 0; i < total; i++) {
+            const dot = document.createElement('div');
+            dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+            dot.onclick = () => goToSlide(i);
+            dotsContainer.appendChild(dot);
+        }
+
+        function goToSlide(n) {
+            slides[current].classList.remove('active');
+            document.querySelectorAll('.nav-dot')[current].classList.remove('active');
+            current = n;
+            slides[current].classList.add('active');
+            document.querySelectorAll('.nav-dot')[current].classList.add('active');
+            counter.textContent = `${current + 1} / ${total}`;
+            animateProgressBars();
+        }
+
+        function nextSlide() { goToSlide((current + 1) % total); }
+        function prevSlide() { goToSlide((current - 1 + total) % total); }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); nextSlide(); }
+            if (e.key === 'ArrowLeft') { e.preventDefault(); prevSlide(); }
+        });
+
+        function animateProgressBars() {
+            const bars = slides[current].querySelectorAll('.progress-fill');
+            bars.forEach(bar => {
+                bar.style.width = '0%';
+                setTimeout(() => { bar.style.width = bar.dataset.width + '%'; }, 200);
+            });
+        }
+
+        setTimeout(animateProgressBars, 400);
+
+        let touchStartX = 0;
+        document.addEventListener('touchstart', (e) => { touchStartX = e.changedTouches[0].screenX; });
+        document.addEventListener('touchend', (e) => {
+            const diff = touchStartX - e.changedTouches[0].screenX;
+            if (Math.abs(diff) > 50) { diff > 0 ? nextSlide() : prevSlide(); }
+        });
+    </script>
+</body>
+</html>
