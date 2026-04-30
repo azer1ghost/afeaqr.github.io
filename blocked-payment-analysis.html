@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+<meta charset="UTF-8">
+<title>Bloklanmış Ödəmə Analizi — Recovery & Loss</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0; padding:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; background:#f5f7fa; color:#1f2937; line-height:1.6;">
+
+<div style="max-width:1100px; margin:0 auto; padding:40px 20px;">
+
+  <!-- HERO -->
+  <header style="background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%); color:white; padding:40px; border-radius:12px; margin-bottom:32px; box-shadow:0 4px 12px rgba(79,70,229,0.2);">
+    <h1 style="margin:0 0 8px; font-size:32px; font-weight:700; letter-spacing:-0.02em;">Bloklanmış Ödəmə Recovery &amp; Loss Analizi</h1>
+    <p style="margin:0; font-size:16px; opacity:0.9;">QR Code SaaS · ClickHouse data warehouse · Hesabat tarixi: 2026-04-30</p>
+  </header>
+
+  <!-- EXECUTIVE SUMMARY -->
+  <section style="background:white; padding:32px; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <h2 style="margin:0 0 16px; font-size:22px; color:#111827; border-left:4px solid #4f46e5; padding-left:12px;">Yekun Xülasə</h2>
+    <p style="margin:0 0 16px; color:#374151;">
+      <code style="background:#eef2ff; color:#4f46e5; padding:2px 8px; border-radius:4px; font-size:14px;">card_logs</code>
+      tablosu backend-də <code style="background:#eef2ff; color:#4f46e5; padding:2px 8px; border-radius:4px; font-size:14px;">PaymentMethod::resolvePaymentProvider</code>
+      icindeki <code style="background:#eef2ff; color:#4f46e5; padding:2px 8px; border-radius:4px; font-size:14px;">firstOrCreate</code>
+      ilə yaranır — yəni AMEX, Discover və digər dəstəklənməyən kart brendləri ilə ödəniş cəhdləri zamanı.
+      Bu analiz iki sual cavablandırır: <strong>blok olunmuş user-lərdən nə qədər qazandıq?</strong> və
+      <strong>nə qədər itirdik?</strong>
+    </p>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin-top:24px;">
+      <div style="background:#f0fdf4; border:1px solid #bbf7d0; padding:20px; border-radius:8px;">
+        <div style="font-size:12px; font-weight:600; color:#15803d; text-transform:uppercase; letter-spacing:0.05em;">Total qazanc</div>
+        <div style="font-size:28px; font-weight:700; color:#14532d; margin-top:6px;">€860,294</div>
+        <div style="font-size:13px; color:#15803d; margin-top:4px;">7,118 user recovery (10.5 ay)</div>
+      </div>
+      <div style="background:#fef2f2; border:1px solid #fecaca; padding:20px; border-radius:8px;">
+        <div style="font-size:12px; font-weight:600; color:#b91c1c; text-transform:uppercase; letter-spacing:0.05em;">Total itki (estimate)</div>
+        <div style="font-size:28px; font-weight:700; color:#7f1d1d; margin-top:6px;">~€411,821</div>
+        <div style="font-size:13px; color:#b91c1c; margin-top:4px;">2,969 itirilmiş user + $11,594 failed renews</div>
+      </div>
+      <div style="background:#eff6ff; border:1px solid #bfdbfe; padding:20px; border-radius:8px;">
+        <div style="font-size:12px; font-weight:600; color:#1d4ed8; text-transform:uppercase; letter-spacing:0.05em;">Recovery rate</div>
+        <div style="font-size:28px; font-weight:700; color:#1e3a8a; margin-top:6px;">69.05%</div>
+        <div style="font-size:13px; color:#1d4ed8; margin-top:4px;">10,308 bloklanmış account-dan</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- METHODOLOGY -->
+  <section style="background:white; padding:32px; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <h2 style="margin:0 0 16px; font-size:22px; color:#111827; border-left:4px solid #4f46e5; padding-left:12px;">Metodologiya</h2>
+
+    <h3 style="margin:24px 0 8px; font-size:16px; color:#374151;">Block scenario klassifikasiyası</h3>
+    <table style="width:100%; border-collapse:collapse; font-size:14px;">
+      <tr style="background:#f9fafb;">
+        <td style="padding:12px; border:1px solid #e5e7eb; vertical-align:top; width:35%;">
+          <strong style="color:#7c3aed;">CREATE_blocked</strong>
+        </td>
+        <td style="padding:12px; border:1px solid #e5e7eb;">
+          User-in blokdan əvvəl heç bir uğurlu transaction-ı yoxdur — yəni ilk dəfə subscribe cəhd edən və bloka düşən.
+          Uğursuz cəhd nə invoice nə transaction yaradır (validation səviyyəsində <code>BlockedPaymentException</code>).
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:12px; border:1px solid #e5e7eb; vertical-align:top;">
+          <strong style="color:#0891b2;">RENEW_blocked</strong>
+        </td>
+        <td style="padding:12px; border:1px solid #e5e7eb;">
+          User-in blokdan əvvəl uğurlu transaction-ı VAR — mövcud abunəçi renewal cəhdində bloka düşüb.
+          <code>subscription_histories</code>-də <code>type='renew' AND paid_at IS NULL</code> kimi izlənir.
+        </td>
+      </tr>
+    </table>
+
+    <h3 style="margin:24px 0 8px; font-size:16px; color:#374151;">Lost amount estimation pipeline</h3>
+    <div style="background:#f9fafb; border:1px solid #e5e7eb; padding:16px; border-radius:8px; font-family:'SF Mono',Monaco,Consolas,monospace; font-size:13px; color:#374151; line-height:1.7;">
+      <strong>card_logs</strong> (block) → <strong>accounts.user_id</strong> →<br>
+      <strong>client_activity_logs</strong> (type=2 = checkout visit, blokdan əvvəlki son entry) →<br>
+      <strong>interaction_id</strong> (= plan_id user-in seçdiyi) →<br>
+      <strong>plan_group_items</strong> (accounts.plan_group_id × plan_id) →<br>
+      <strong>prices.price</strong> (JSON: <code>{"EUR":...,"USD":...}</code>)
+    </div>
+    <p style="margin:12px 0 0; color:#6b7280; font-size:13px;">
+      <em>Qeyd:</em> List price-dur (tax/gateway fee/exchange rate yoxdur). Faktiki paid məbləğ ~7–10% yuxarı olur.
+    </p>
+  </section>
+
+  <!-- 30-DAY RESULTS -->
+  <section style="background:white; padding:32px; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <h2 style="margin:0 0 16px; font-size:22px; color:#111827; border-left:4px solid #f59e0b; padding-left:12px;">30 günlük nəticələr (2026-04-01 — 2026-04-30)</h2>
+
+    <h3 style="margin:24px 0 12px; font-size:16px; color:#374151;">Bloklar &amp; Recovery</h3>
+    <table style="width:100%; border-collapse:collapse; font-size:14px;">
+      <thead>
+        <tr style="background:#f9fafb;">
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:left;">Scenario</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Bloklanan</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Recovered</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Rate</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Earned EUR</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:10px; border:1px solid #e5e7eb;">CREATE_blocked</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">945</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">617</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">65.3%</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; font-weight:600; color:#15803d;">€76,011.20</td>
+        </tr>
+        <tr style="background:#fafafa;">
+          <td style="padding:10px; border:1px solid #e5e7eb;">RENEW_blocked</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">62</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">6</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">9.7%</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; font-weight:600; color:#15803d;">€712.87</td>
+        </tr>
+        <tr style="background:#eef2ff; font-weight:600;">
+          <td style="padding:10px; border:1px solid #e5e7eb;">CƏM</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">1,007</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">623</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">61.9%</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#15803d;">€76,724.07</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin:24px 0 12px; font-size:16px; color:#374151;">İtirilmiş məbləğ</h3>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px;">
+      <div style="background:#fef2f2; border:1px solid #fecaca; padding:20px; border-radius:8px;">
+        <div style="font-size:12px; font-weight:600; color:#b91c1c; text-transform:uppercase;">CREATE_blocked NOT-recovered</div>
+        <div style="font-size:24px; font-weight:700; color:#7f1d1d; margin:8px 0;">~€46,021.68</div>
+        <div style="font-size:13px; color:#7f1d1d;">328 user · plan-aware list price</div>
+      </div>
+      <div style="background:#fff7ed; border:1px solid #fed7aa; padding:20px; border-radius:8px;">
+        <div style="font-size:12px; font-weight:600; color:#c2410c; text-transform:uppercase;">RENEW_blocked failed</div>
+        <div style="font-size:24px; font-weight:700; color:#7c2d12; margin:8px 0;">$7,006.95</div>
+        <div style="font-size:13px; color:#7c2d12;">53 failed renew attempts</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TOTAL TIME RESULTS -->
+  <section style="background:white; padding:32px; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <h2 style="margin:0 0 16px; font-size:22px; color:#111827; border-left:4px solid #dc2626; padding-left:12px;">Total tarixi nəticələr (2025-06-17 — 2026-04-30, ~10.5 ay)</h2>
+
+    <h3 style="margin:24px 0 12px; font-size:16px; color:#374151;">Bloklar &amp; Recovery</h3>
+    <table style="width:100%; border-collapse:collapse; font-size:14px;">
+      <thead>
+        <tr style="background:#f9fafb;">
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:left;">Scenario</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Bloklanan</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Recovered</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Rate</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Earned EUR</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:10px; border:1px solid #e5e7eb;">CREATE_blocked</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">10,039</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">7,070</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">70.43%</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; font-weight:600; color:#15803d;">€853,249.14</td>
+        </tr>
+        <tr style="background:#fafafa;">
+          <td style="padding:10px; border:1px solid #e5e7eb;">RENEW_blocked</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">269</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">48</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">17.84%</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; font-weight:600; color:#15803d;">€7,045.15</td>
+        </tr>
+        <tr style="background:#eef2ff; font-weight:600;">
+          <td style="padding:10px; border:1px solid #e5e7eb;">CƏM</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">10,308</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">7,118</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">69.05%</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#15803d;">€860,294.29</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin:24px 0 12px; font-size:16px; color:#374151;">İtirilmiş məbləğ — plan-aware breakdown</h3>
+    <p style="margin:0 0 12px; color:#6b7280; font-size:13px;">
+      CREATE_blocked NOT-recovered: <strong>2,969 user</strong> (2,966-da checkout activity log var, 3-də yox).
+    </p>
+    <table style="width:100%; border-collapse:collapse; font-size:14px;">
+      <thead>
+        <tr style="background:#f9fafb;">
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:left;">Plan group (id, key)</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:left;">Plan (id, name)</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">User sayı</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">List price (EUR)</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Lost EUR</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:10px; border:1px solid #e5e7eb;">16 · <code>basic_eleven</code> (Basic 11.1 yearly)</td>
+          <td style="padding:10px; border:1px solid #e5e7eb;">3 · <strong>Basic</strong></td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">2,273</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€133.20</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#b91c1c; font-weight:600;">€302,763.60</td>
+        </tr>
+        <tr style="background:#fafafa;">
+          <td style="padding:10px; border:1px solid #e5e7eb;">16 · <code>basic_eleven</code></td>
+          <td style="padding:10px; border:1px solid #e5e7eb;">2 · <strong>Advanced</strong></td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">548</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€144.00</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#b91c1c; font-weight:600;">€78,912.00</td>
+        </tr>
+        <tr>
+          <td style="padding:10px; border:1px solid #e5e7eb;">16 · <code>basic_eleven</code></td>
+          <td style="padding:10px; border:1px solid #e5e7eb;">1 · <strong>Professional</strong></td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">37</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€438.96</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#b91c1c; font-weight:600;">€16,241.52</td>
+        </tr>
+        <tr style="background:#fafafa;">
+          <td style="padding:10px; border:1px solid #e5e7eb;">1 · <code>starter</code> (Starter default)</td>
+          <td style="padding:10px; border:1px solid #e5e7eb;">3 · <strong>Basic</strong></td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">71</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€95.76</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#b91c1c;">€6,798.96</td>
+        </tr>
+        <tr>
+          <td style="padding:10px; border:1px solid #e5e7eb;">1 · <code>starter</code></td>
+          <td style="padding:10px; border:1px solid #e5e7eb;">2 · <strong>Advanced</strong></td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">26</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€144.00</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#b91c1c;">€3,744.00</td>
+        </tr>
+        <tr style="background:#fafafa;">
+          <td style="padding:10px; border:1px solid #e5e7eb;">1 · <code>starter</code></td>
+          <td style="padding:10px; border:1px solid #e5e7eb;">1 · <strong>Professional</strong></td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">6</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€438.96</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#b91c1c;">€2,633.76</td>
+        </tr>
+        <tr>
+          <td style="padding:10px; border:1px solid #e5e7eb;">2 · <code>expensive</code> (Expensive)</td>
+          <td style="padding:10px; border:1px solid #e5e7eb;">3 · <strong>Basic</strong></td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">1</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€154.68</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#b91c1c;">€154.68</td>
+        </tr>
+        <tr style="background:#fafafa;">
+          <td style="padding:10px; border:1px solid #e5e7eb;">4 · <code>adaptive</code> (Adaptive)</td>
+          <td style="padding:10px; border:1px solid #e5e7eb;">7 · <strong>All-Inclusive</strong></td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">1</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">~€162.00</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#b91c1c;">~€162.00</td>
+        </tr>
+        <tr>
+          <td style="padding:10px; border:1px solid #e5e7eb;">20 · <code>basic_eleven_transparent</code></td>
+          <td style="padding:10px; border:1px solid #e5e7eb;">3 · <strong>Basic</strong></td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">2</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€133.20</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#b91c1c;">€266.40</td>
+        </tr>
+        <tr style="background:#fafafa;">
+          <td style="padding:10px; border:1px solid #e5e7eb;">20 · <code>basic_eleven_transparent</code></td>
+          <td style="padding:10px; border:1px solid #e5e7eb;">2 · <strong>Advanced</strong></td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">1</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€144.00</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#b91c1c;">€144.00</td>
+        </tr>
+        <tr style="background:#fef2f2; font-weight:700;">
+          <td colspan="2" style="padding:12px; border:1px solid #e5e7eb;">CƏM</td>
+          <td style="padding:12px; border:1px solid #e5e7eb; text-align:right;">2,966</td>
+          <td style="padding:12px; border:1px solid #e5e7eb;"></td>
+          <td style="padding:12px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-size:16px;">~€411,820.92</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; margin-top:20px;">
+      <div style="background:#fff7ed; border:1px solid #fed7aa; padding:20px; border-radius:8px;">
+        <div style="font-size:12px; font-weight:600; color:#c2410c; text-transform:uppercase;">RENEW_blocked failed renews (Total)</div>
+        <div style="font-size:24px; font-weight:700; color:#7c2d12; margin:8px 0;">$11,593.58</div>
+        <div style="font-size:13px; color:#7c2d12;">77 failed attempts · 77 unique account</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- VALIDATION -->
+  <section style="background:white; padding:32px; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <h2 style="margin:0 0 16px; font-size:22px; color:#111827; border-left:4px solid #10b981; padding-left:12px;">Methodology Validation</h2>
+    <p style="margin:0 0 12px; color:#374151;">
+      Recovered user-lərlə eyni pipeline yoxlandı (block → activity_logs.type=2 → interaction_id=plan_id → plan_group_items → prices). Hər iki halda <code>price_id</code> dəqiq tutuşur.
+    </p>
+    <table style="width:100%; border-collapse:collapse; font-size:14px;">
+      <thead>
+        <tr style="background:#f9fafb;">
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:left;">Account</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">List price (estimate)</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Faktiki paid</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:left;">price_id match</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:10px; border:1px solid #e5e7eb;">569485</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€234.96</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€253.40</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; color:#15803d; font-weight:600;">✓ price_id=34</td>
+        </tr>
+        <tr style="background:#fafafa;">
+          <td style="padding:10px; border:1px solid #e5e7eb;">1329222</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€144.00</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€154.01</td>
+          <td style="padding:10px; border:1px solid #e5e7eb; color:#15803d; font-weight:600;">✓ price_id=28</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="margin:16px 0 0; color:#6b7280; font-size:13px; font-style:italic;">
+      Real paid məbləğ list price-dan tax + gateway fee + exchange rate düzəlişlərinə görə ~7–10% yüksəkdir. Estimate konservativdir.
+    </p>
+  </section>
+
+  <!-- KEY INSIGHTS -->
+  <section style="background:white; padding:32px; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <h2 style="margin:0 0 16px; font-size:22px; color:#111827; border-left:4px solid #8b5cf6; padding-left:12px;">Əsas tapıntılar &amp; PO action-ları</h2>
+    <ul style="margin:0; padding-left:24px; color:#374151;">
+      <li style="margin-bottom:12px;">
+        <strong>Block-ların 97%-i CREATE-də</strong> baş verir (yeni user-lər).
+        Bu, AMEX/Discover blokunun məhz <strong>customer acquisition</strong> mərhələsində ən böyük itki yaratdığını göstərir.
+      </li>
+      <li style="margin-bottom:12px;">
+        <strong>Recovery rate CREATE-də 70%-dir</strong>: blok olunmuş yeni user-lərin əksəriyyəti dakikalar ərzində başqa kart ilə yenidən cəhd edib uğur qazanır.
+        Bu, bloku <em>tam itki kimi qiymətləndirməməyə</em> əsas verir.
+      </li>
+      <li style="margin-bottom:12px;">
+        <strong>Total potensial qazanc</strong> (qazanılmış + itirilmiş): €860K + €412K ≈ <strong>€1.27M</strong>. AMEX/Discover dəstəkləsəydik təxminən bu məbləği tutardıq.
+      </li>
+      <li style="margin-bottom:12px;">
+        <strong>RENEW_blocked recovery 18%-dir</strong> — CREATE-dən kəskin aşağı. Burada user "bir dəfə uğurlu ödəyib", indi kart problemi var və əlavə effort qoymurlar.
+        Card-update reminder kampaniyası bu rəqəmi qaldıra bilər.
+      </li>
+      <li style="margin-bottom:12px;">
+        <strong><code>basic_eleven</code> plan group-da Basic plan (€133.20)</strong> ən çox itirilən kateqoriyadır — 2,273 user × €133.20 = €302K (total itkinin 73%-i).
+        Targeted recovery push (məs. AMEX/Discover bloklananlara avtomatik Visa/Mastercard reminder) ən yüksək ROI verə bilər.
+      </li>
+    </ul>
+  </section>
+
+  <!-- DATA SOURCES -->
+  <section style="background:#1f2937; color:#e5e7eb; padding:24px; border-radius:12px; margin-bottom:24px;">
+    <h2 style="margin:0 0 12px; font-size:18px; color:white;">Data mənbələri &amp; relationships</h2>
+    <div style="font-family:'SF Mono',Monaco,Consolas,monospace; font-size:13px; line-height:1.8; color:#d1d5db;">
+      <strong style="color:#a78bfa;">qrcode_data.card_logs</strong> · backend <code style="color:#fbbf24;">PaymentMethod::resolvePaymentProvider</code> firstOrCreate<br>
+      <strong style="color:#a78bfa;">qrcode_data.transactions</strong> · uğurlu/uğursuz ödəmələr<br>
+      <strong style="color:#a78bfa;">qrcode_data.subscription_invoices</strong> · invoice + amount_due<br>
+      <strong style="color:#a78bfa;">qrcode_data.subscription_histories</strong> · type='renew' AND paid_at IS NULL = failed renew<br>
+      <strong style="color:#a78bfa;">qrcode_data.client_activity_logs</strong> · type=2 = checkout visit, interaction_id = plan_id<br>
+      <strong style="color:#a78bfa;">qrcode_data.plan_group_items</strong> · accounts.plan_group_id × plan_id → price_id<br>
+      <strong style="color:#a78bfa;">qrcode_data.prices</strong> · price JSON {"EUR":..., "USD":...}
+    </div>
+  </section>
+
+  <footer style="text-align:center; color:#9ca3af; font-size:13px; padding:20px 0;">
+    Hazırlandı: ClickHouse data warehouse · qr-manager analytics<br>
+    Source query-lər: <code>database/script.sql</code>
+  </footer>
+
+</div>
+
+</body>
+</html>
