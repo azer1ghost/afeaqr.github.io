@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+<meta charset="UTF-8">
+<title>Block-Rank Analizi v2 (dispute/refund split + create-weighted)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0; padding:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; background:#f5f7fa; color:#1f2937; line-height:1.6;">
+
+<div style="max-width:1400px; margin:0 auto; padding:40px 20px;">
+
+  <header style="background:linear-gradient(135deg,#0891b2 0%,#7c3aed 100%); color:white; padding:40px; border-radius:12px; margin-bottom:32px; box-shadow:0 4px 12px rgba(8,145,178,0.2);">
+    <h1 style="margin:0 0 8px; font-size:30px; font-weight:700; letter-spacing:-0.02em;">Block-Rank Analizi v2 — dispute/refund split + create-weighted score</h1>
+    <p style="margin:0; font-size:15px; opacity:0.9;">Hansı 5-dim combo-ları blokladıqda ən az gəlir itirib ən çox dispute/refund qarşısı alınar. Create disputes 1.5× weight (CAC).</p>
+  </header>
+
+  <!-- METHODOLOGY -->
+  <section style="background:white; padding:28px; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <h2 style="margin:0 0 12px; font-size:20px; color:#111827; border-left:4px solid #0891b2; padding-left:12px;">Bu analiz nəyi göstərir</h2>
+    <p style="margin:0 0 12px; color:#374151;">
+      Hər ödəniş-müştəri kombinasiyası üçün — yəni (<strong>subscription tipi × ölkə × ştat × kart şəbəkəsi × bank</strong>) — biz iki şeyi müqayisə edirik:
+      o combo-dan əldə etdiyimiz <strong>uğurlu gəlir</strong> və o combo-da yaranmış <strong>itki</strong> (bank chargeback + refund).
+      Məqsəd: hansı combo-ları gateway-də bloklasaq, ən az legitimate gəlir itirib ən çox dispute/refund qarşısı alarıq?
+    </p>
+    <p style="margin:0 0 12px; color:#374151;">
+      Loss iki növə bölünür çünki onların biznes təsiri fərqlidir:
+      <strong>bank chargeback (dispute)</strong> Stripe-da chargeback ratio-nu artırır və fee-ə səbəb olur (4 ay ardıcıl &gt;0.7% = restriction);
+      <strong>refund</strong> (prevention service-lər, chargeback911, admin manual) fee yaratmır amma gəliri itiririk.
+      Bu səbəbdən hər combo üçün ayrıca <em>dispute share</em> göstərilir — eyni 20% loss rate-ə malik iki combo fərqli aksiya tələb edə bilər.
+    </p>
+    <p style="margin:0 0 12px; color:#374151;">
+      Score-da <strong>create dispute-ları 1.5× ağırlıqla</strong> dəyərləndirilir, çünki yeni müştəri cəlb etmək üçün marketing CAC sərf edirik —
+      bir create-dispute = revenue itki + CAC itki. Renew isə artıq cəlb edilmiş müştəridən "costsuz" gələn gəlirdir, ona görə renew bloklamaq nisbətən daha bahalıdır.
+    </p>
+    <p style="margin:0; color:#374151;">
+      Statistik mənaverən nəticələr üçün hər combo minimum <code>tx_count ≥ 30 AND revenue ≥ €3,000 AND loss > 0</code> şərtini ödəməlidir;
+      bu, kiçik təsadüfi outlier-ləri (məs. 1 tx 1 dispute = 100% rate) çıxarır.
+    </p>
+  </section>
+
+  <!-- PLATFORM STATS -->
+  <section style="background:white; padding:28px; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <h2 style="margin:0 0 12px; font-size:20px; color:#111827; border-left:4px solid #1d4ed8; padding-left:12px;">Platform total stats (~2.5 il)</h2>
+    <table style="width:100%; border-collapse:collapse; font-size:14px;">
+      <thead>
+        <tr style="background:#f9fafb;">
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:left;">Sub_type</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Tx count</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Revenue EUR</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Disp count</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Disp EUR</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Disp rate</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Refund count</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Refund EUR</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Refund rate</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:right;">Total rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td style="padding:10px; border:1px solid #e5e7eb;"><strong>Create</strong></td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">202,345</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#1d4ed8; font-weight:700;">€27,025,796</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">1,886</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#b91c1c;">€268,165</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">0.99%</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">8,971</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#b91c1c;">€1,043,728</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">3.86%</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right; font-weight:700;">4.85%</td></tr>
+        <tr style="background:#fafafa;"><td style="padding:10px; border:1px solid #e5e7eb;"><strong>Renew</strong></td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">19,689</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#1d4ed8; font-weight:700;">€2,707,526</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">405</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#b91c1c;">€48,092</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">1.78%</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">1,560</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right; color:#b91c1c;">€188,498</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">6.96%</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right; font-weight:700;">8.74%</td></tr>
+        <tr style="background:#eef2ff; font-weight:600;"><td style="padding:10px; border:1px solid #e5e7eb;">CƏMİ</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">222,034</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€29,733,322</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">2,291</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€316,257</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">1.06%</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">10,531</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">€1,232,226</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">4.14%</td><td style="padding:10px; border:1px solid #e5e7eb; text-align:right;">5.21%</td></tr>
+      </tbody>
+    </table>
+    <p style="margin:12px 0 0; color:#6b7280; font-size:13px;">
+      ⚠️ <strong>Renew dispute rate-i create-dən təxminən 2× yüksəkdir</strong> (8.74% vs 4.85%). Lakin renew "free money"dir — blok etsək marketing CAC qaytaracaq müştərini itiririk. Bu səbəbdən score-da create 1.5× weight alır.
+    </p>
+    <details style="margin-top:16px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:12px;">
+      <summary style="cursor:pointer; font-weight:600; font-size:13px; color:#374151;">SQL — Platform total stats query</summary>
+<pre style="margin:12px 0 0; font-family:'SF Mono',Monaco,Consolas,monospace; font-size:12px; background:#1f2937; color:#e5e7eb; padding:14px; border-radius:6px; overflow-x:auto;">SELECT
+    t.description AS sub_type,
+    if(c.type = 'dispute', 'dispute', 'refund') AS loss_type,
+    round(SUM(c.amount * c.exchange_rate / 100), 2) AS loss_eur,
+    count(*) AS cnt
+FROM qrcode_data.chargebacks c FINAL
+JOIN qrcode_data.transactions t FINAL ON t.id = c.transaction_id
+WHERE t.description IN ('Subscription create','Subscription renew')
+  AND NOT (c.type = 'dispute' AND c.status = 'won')
+  AND NOT (c.type IN ('refund','partial_refund') AND c.status = 'failed')
+GROUP BY sub_type, loss_type;
+
+-- Revenue:
+SELECT t.description, count(*) AS tx,
+       round(SUM(t.amount * t.exchange_rate / 100), 2) AS rev_eur
+FROM qrcode_data.transactions t FINAL
+WHERE t.status = 'succeeded'
+  AND t.description IN ('Subscription create','Subscription renew')
+GROUP BY t.description;</pre>
+    </details>
+  </section>
+
+  <!-- COMBINED RANKING -->
+  <section style="background:white; padding:28px; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <h2 style="margin:0 0 8px; font-size:20px; color:#111827; border-left:4px solid #dc2626; padding-left:12px;">Combined ranking — TOP 20 (weighted_score DESC)</h2>
+    <p style="margin:0 0 12px; color:#6b7280; font-size:13px;">
+      <code>weighted_score = loss_rate × (create: 1.5 / renew: 1.0)</code> · Sıralama bütün create+renew combo-larında.
+    </p>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:11px;">
+      <thead>
+        <tr style="background:#f9fafb;">
+          <th style="padding:6px; border:1px solid #e5e7eb; cursor:help;" title="Sıra nömrəsi (weighted_score üzrə)">#</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; cursor:help;" title="Subscription type — create (yeni abunə) və ya renew (təkrar ödəniş)">Sub</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; cursor:help;" title="Ölkə kodu / ştat (yalnız US və CA üçün)">Country/State</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; cursor:help;" title="Kart şəbəkəsi: visa / mastercard / amex / discover">Brand</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; cursor:help;" title="Kartı verən bank (payment_methods.issuer)">Issuer</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Bu combo-da uğurlu transaction sayı (succeeded create + renew)">Tx</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Bank chargeback (dispute) sayı — won olmayan">Disp</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Refund sayı (refund + partial_refund, succeeded)">Ref</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Bu combo-dan əldə etdiyimiz total revenue EUR (gross)">Rev EUR</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Bank chargeback (dispute) EUR cəmi — Stripe ratio-ya təsir edir, fee var">Disp EUR</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Refund EUR cəmi — prevention services / chargeback911 / admin / risk. Fee yox, amma revenue itkisi">Ref EUR</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Total loss rate = (dispute + refund) / revenue × 100. Platform ortalaması 5.21%">Total rate</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Yalnız dispute (bank chargeback) rate = disp_eur / revenue × 100. Platform ortalaması 1.06%">Disp%</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Yalnız refund rate = refund_eur / revenue × 100. Platform ortalaması 4.14%">Ref%</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Combo daxili: total loss-un nə qədər %-i bank dispute-dur (digər %-i refund). 60%+ dispute share = Stripe chargeback ratio təhdidi">Disp share</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Weighted score = loss_rate × (create üçün 1.5, renew üçün 1.0). Create-də CAC nəzərə alınır">Score</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:#fef2f2; font-weight:600;"><td style="padding:5px; border:1px solid #e5e7eb;">1</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">BR</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">BANCO C6</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">91</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">28</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€10,813</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">—</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€3,332</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">30.81%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">30.81%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">46.22</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">2</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">BR</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">SANTANDER S.A.</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">71</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">14</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">9</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€7,881</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,297</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,099</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">30.39%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">16.45%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">13.94%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">54% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">45.59</td></tr>
+        <tr style="background:#fee2e2; font-weight:700;"><td style="padding:5px; border:1px solid #e5e7eb;">3 ⭐</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">BR</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">NUBANK</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">640</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">197</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€71,244</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€86</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€19,892</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">28.04%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.12%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">27.92%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.4% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">42.06</td></tr>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">4</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">MX</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">MERCADO LENDING</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">38</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">6</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,797</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">—</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,170</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">24.40%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">24.40%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">36.60</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">5</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">BR</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">SANTANDER (BR)</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">77</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">22</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€8,481</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">—</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€2,021</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">23.83%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">23.83%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">35.74</td></tr>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">6</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">US/MT</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">CAPITAL ONE</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">30</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">4</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">4</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€3,810</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€432</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€465</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">23.53%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">11.33%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">12.20%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">48% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">35.30</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">7</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">US/WI</td><td style="padding:5px; border:1px solid #e5e7eb;">disc</td><td style="padding:5px; border:1px solid #e5e7eb;">DISCOVER</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">34</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">5</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">2</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,383</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€755</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€198</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">21.74%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">17.22%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">4.52%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">79% disp ⚠</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">32.61</td></tr>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">8</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">MX</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">BANCO PLATA</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">33</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">5</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,185</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€89</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€791</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">21.04%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">2.13%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">18.91%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">10% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">31.56</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">9</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">US/UT</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">CAPITAL ONE</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">36</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">7</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,843</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€173</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€800</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">20.10%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">3.57%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">16.53%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">18% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">30.15</td></tr>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">10</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">US/NC</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">CITI COSTCO</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">30</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">2</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">4</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€3,853</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€380</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€393</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">20.07%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">9.87%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">10.20%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">49% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">30.10</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">11</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">US/IN</td><td style="padding:5px; border:1px solid #e5e7eb;">disc</td><td style="padding:5px; border:1px solid #e5e7eb;">DISCOVER ISSUER</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">32</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">3</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">2</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,084</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€613</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€192</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">19.71%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">15.01%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">4.70%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">76% disp ⚠</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">29.57</td></tr>
+        <tr style="background:#fefce8;"><td style="padding:5px; border:1px solid #e5e7eb;">12</td><td style="padding:5px; border:1px solid #e5e7eb;">renew</td><td style="padding:5px; border:1px solid #e5e7eb;">AU</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">COMMONWEALTH</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">32</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">5</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">6</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€3,881</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€508</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€591</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">28.32%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">13.09%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">15.22%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">46% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">28.32</td></tr>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">13</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">US/MA</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">CAPITAL ONE</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">84</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">9</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€11,991</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€827</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,430</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">18.82%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">6.90%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">11.93%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">37% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">28.23</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">14</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">US/AZ</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">CITI COSTCO</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">59</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">3</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">9</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€7,386</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€500</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€845</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">18.22%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">6.78%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">11.44%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">37% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">27.33</td></tr>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">15</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">US/IA</td><td style="padding:5px; border:1px solid #e5e7eb;">disc</td><td style="padding:5px; border:1px solid #e5e7eb;">DISCOVER</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">32</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">4</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,753</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€471</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€383</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">17.98%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">9.92%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">8.06%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">55% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">26.97</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">16</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">BR</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">BANCO XP</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">45</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">9</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,829</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">—</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€855</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">17.70%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">17.70%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">26.55</td></tr>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">17</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">MX</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">BANAMEX</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">94</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">13</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€11,263</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€168</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,821</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">17.66%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1.49%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">16.17%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">8% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">26.49</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">18</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">US/IL</td><td style="padding:5px; border:1px solid #e5e7eb;">disc</td><td style="padding:5px; border:1px solid #e5e7eb;">DISCOVER</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">72</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">6</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">5</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€9,402</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,162</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€488</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">17.54%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">12.36%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">5.19%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">70% disp ⚠</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">26.31</td></tr>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">19</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">BR</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">MERCADO PAGO</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">45</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">2</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">7</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,738</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€157</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€664</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">17.33%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">3.32%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">14.01%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">19% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">25.99</td></tr>
+        <tr style="background:#fee2e2; font-weight:700;"><td style="padding:5px; border:1px solid #e5e7eb;">20 ⭐</td><td style="padding:5px; border:1px solid #e5e7eb;">create</td><td style="padding:5px; border:1px solid #e5e7eb;">BR</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">ITAU</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">177</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">38</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€20,638</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">—</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€3,552</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">17.21%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">17.21%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0% disp</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">25.82</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <details style="margin-top:16px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:12px;">
+      <summary style="cursor:pointer; font-weight:600; font-size:13px; color:#374151;">SQL — Combined ranking query (weighted_score DESC)</summary>
+<pre style="margin:12px 0 0; font-family:'SF Mono',Monaco,Consolas,monospace; font-size:12px; background:#1f2937; color:#e5e7eb; padding:14px; border-radius:6px; overflow-x:auto;">SELECT
+    sub_type, country, state_norm AS state, brand, issuer_raw AS issuer,
+    countIf(event_type = 'REVENUE') AS tx_count,
+    countIf(event_type = 'DISP')    AS disp_count,
+    countIf(event_type = 'REFUND')  AS refund_count,
+    round(sumIf(amt, event_type = 'REVENUE'), 2)                   AS revenue_eur,
+    round(sumIf(amt, event_type = 'DISP'),    2)                   AS disp_eur,
+    round(sumIf(amt, event_type = 'REFUND'),  2)                   AS refund_eur,
+    round(sumIf(amt, event_type IN ('DISP','REFUND')), 2)          AS loss_eur,
+    round(sumIf(amt, event_type IN ('DISP','REFUND'))
+          / sumIf(amt, event_type = 'REVENUE') * 100, 2)           AS loss_rate_pct,
+    round(sumIf(amt, event_type = 'DISP')
+          / sumIf(amt, event_type = 'REVENUE') * 100, 2)           AS disp_rate_pct,
+    round(sumIf(amt, event_type = 'REFUND')
+          / sumIf(amt, event_type = 'REVENUE') * 100, 2)           AS refund_rate_pct,
+    round(sumIf(amt, event_type = 'DISP')
+          / nullIf(sumIf(amt, event_type IN ('DISP','REFUND')), 0) * 100, 2)
+                                                                   AS combo_disp_share_pct,
+    round(sumIf(amt, event_type IN ('DISP','REFUND'))
+          / sumIf(amt, event_type = 'REVENUE') * 100
+          * if(any(sub_type) = 'Subscription create', 1.5, 1.0), 2) AS weighted_score
+FROM (
+    SELECT 'REVENUE' AS event_type, t.description AS sub_type,
+           a.country, if(a.country IN ('US','CA'), a.state, NULL) AS state_norm,
+           pm.card_brand AS brand, pm.issuer AS issuer_raw,
+           t.amount * t.exchange_rate / 100 AS amt
+    FROM qrcode_data.transactions t FINAL
+    JOIN qrcode_data.payment_methods pm FINAL ON pm.id = t.payment_method_id
+    JOIN qrcode_data.accounts a FINAL ON a.id = t.account_id
+    WHERE t.status = 'succeeded'
+      AND t.description IN ('Subscription create','Subscription renew')
+
+    UNION ALL
+
+    SELECT if(c.type = 'dispute', 'DISP', 'REFUND'),
+           t.description, a.country,
+           if(a.country IN ('US','CA'), a.state, NULL),
+           pm.card_brand, pm.issuer, c.amount * c.exchange_rate / 100
+    FROM qrcode_data.chargebacks c FINAL
+    JOIN qrcode_data.transactions t FINAL ON t.id = c.transaction_id
+    JOIN qrcode_data.payment_methods pm FINAL ON pm.id = t.payment_method_id
+    JOIN qrcode_data.accounts a FINAL ON a.id = t.account_id
+    WHERE t.description IN ('Subscription create','Subscription renew')
+      AND NOT (c.type = 'dispute' AND c.status = 'won')
+      AND NOT (c.type IN ('refund','partial_refund') AND c.status = 'failed')
+)
+GROUP BY sub_type, country, state_norm, brand, issuer_raw
+HAVING tx_count >= 30 AND revenue_eur >= 3000 AND loss_eur > 0
+ORDER BY weighted_score DESC LIMIT 40;</pre>
+    </details>
+  </section>
+
+  <!-- DISP vs REFUND PATTERN -->
+  <section style="background:white; padding:28px; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <h2 style="margin:0 0 12px; font-size:20px; color:#111827; border-left:4px solid #f59e0b; padding-left:12px;">Disp vs Refund pattern (combo daxili)</h2>
+    <p style="margin:0 0 12px; color:#374151;">
+      Combo-nun loss-u <strong>bank chargeback (disp)</strong>-dan, yoxsa <strong>refund</strong>-dan gəlir? Bu, fərqli aksiya tələb edir.
+    </p>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px;">
+      <div style="background:#fef2f2; border:1px solid #fecaca; padding:18px; border-radius:8px;">
+        <div style="font-size:13px; font-weight:700; color:#7f1d1d; margin-bottom:8px;">DISPUTE-HEAVY (≥60% disp share)</div>
+        <div style="font-size:12px; color:#7f1d1d; line-height:1.7;">
+          • US/WI · Discover · 79% disp ⚠<br>
+          • US/IN · Discover Issuer · 76% disp<br>
+          • US/IL · Discover · 70% disp<br>
+          • US/IN · Discover · 60% disp
+          <hr style="margin:8px 0; border:none; border-top:1px solid #fecaca;">
+          <strong>Tövsiyə:</strong> BLOCK + mandatory 3DS. Stripe chargeback ratio təhdidi.
+        </div>
+      </div>
+      <div style="background:#fff7ed; border:1px solid #fed7aa; padding:18px; border-radius:8px;">
+        <div style="font-size:13px; font-weight:700; color:#7c2d12; margin-bottom:8px;">REFUND-HEAVY (≥80% refund share)</div>
+        <div style="font-size:12px; color:#7c2d12; line-height:1.7;">
+          • BR · Nubank · 99.6% refund (€20K loss) ⭐<br>
+          • BR · Itaú · 100% refund (€3.5K)<br>
+          • BR · C6 · 100% refund<br>
+          • US/CA · BoA Consumer · 100% refund (renew)<br>
+          • MX · Banamex · 92% refund<br>
+          • MX · Banco Plata · 90% refund
+          <hr style="margin:8px 0; border:none; border-top:1px solid #fed7aa;">
+          <strong>Tövsiyə:</strong> friction artır (3DS challenge, AVS strict). Prevention services trigger edənlər.
+        </div>
+      </div>
+      <div style="background:#fefce8; border:1px solid #fde68a; padding:18px; border-radius:8px;">
+        <div style="font-size:13px; font-weight:700; color:#713f12; margin-bottom:8px;">MIXED (40-60% split)</div>
+        <div style="font-size:12px; color:#713f12; line-height:1.7;">
+          • BR · Santander · 54/46<br>
+          • US/MT · Capital One · 48/52<br>
+          • US/NC · Citi Costco · 49/50<br>
+          • AU · Commonwealth · 46/54<br>
+          • US/IA · Discover · 55/45
+          <hr style="margin:8px 0; border:none; border-top:1px solid #fde68a;">
+          <strong>Tövsiyə:</strong> case-by-case. Disp share trend-i izlə.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CREATE-ONLY DEEP DIVE -->
+  <section style="background:white; padding:28px; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <h2 style="margin:0 0 8px; font-size:20px; color:#111827; border-left:4px solid #dc2626; padding-left:12px;">CREATE-only deep-dive (top 20, loss_rate DESC)</h2>
+    <p style="margin:0 0 12px; color:#6b7280; font-size:13px;">
+      Sıralama yalnız create combo-larında. <code>revenue_pct_of_create</code> = total create revenue-dakı paya, <code>net_loss_pct_of_create</code> = bloklasaq itirəcəyimiz xalis %.
+    </p>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:11px;">
+      <thead>
+        <tr style="background:#f9fafb;">
+          <th style="padding:6px; border:1px solid #e5e7eb; cursor:help;" title="Sıra nömrəsi (loss_rate üzrə)">#</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; cursor:help;" title="Country / State (yalnız US-CA üçün ştat)">C/St</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; cursor:help;" title="Kart şəbəkəsi">Brand</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; cursor:help;" title="Kartı verən bank">Issuer</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Uğurlu CREATE transaction sayı">Tx</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Disp count / Refund count — bank chargeback sayı və refund sayı (slash ilə ayrılmış)">Disp/Ref</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Bu combo CREATE revenue EUR cəmi">Rev EUR</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Total loss EUR (dispute + refund)">Loss EUR</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Total loss rate = loss / revenue × 100. CREATE platform ortalaması 4.85%">Rate</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Yalnız dispute rate = disp_eur / revenue × 100. CREATE platform ortalaması 0.99%">Disp%</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Combo daxili: total loss-un nə qədər %-i bank dispute-dur (qalanı refund). 60%+ = Stripe ratio təhdidi">Disp share</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Bu combo revenue total CREATE revenue (€27.0M) içindəki payı %-lə">Rev % of create</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Bloklasaq xalis itki: (loss − revenue) / total CREATE revenue × 100. Mənfi = bloklamaq bizə revenue itkisi gətirir">Net % of create</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">1</td><td style="padding:5px; border:1px solid #e5e7eb;">BR</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">BANCO C6</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">91</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0/28</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€10,813</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€3,332</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">30.81%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.040%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.028%</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">2</td><td style="padding:5px; border:1px solid #e5e7eb;">BR</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">SANTANDER</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">71</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">14/9</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€7,881</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€2,395</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">30.39%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">16.45%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">54%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.029%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.020%</td></tr>
+        <tr style="background:#fee2e2; font-weight:700;"><td style="padding:5px; border:1px solid #e5e7eb;">3 ⭐</td><td style="padding:5px; border:1px solid #e5e7eb;">BR</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">NUBANK</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">640</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1/197</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€71,244</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€19,978</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">28.04%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.12%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.4%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; font-weight:700;">0.264%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed; font-weight:700;">−0.190%</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">4</td><td style="padding:5px; border:1px solid #e5e7eb;">MX</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">MERCADO LENDING</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">38</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0/6</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,797</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,170</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">24.40%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.018%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.013%</td></tr>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">5</td><td style="padding:5px; border:1px solid #e5e7eb;">BR</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">SANTANDER (BR)</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">77</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0/22</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€8,481</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€2,021</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">23.83%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.031%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.024%</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">6</td><td style="padding:5px; border:1px solid #e5e7eb;">US/MT</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">CAPITAL ONE</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">30</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">4/4</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€3,810</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€896</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">23.53%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">11.33%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">48%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.014%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.011%</td></tr>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">7</td><td style="padding:5px; border:1px solid #e5e7eb;">US/WI</td><td style="padding:5px; border:1px solid #e5e7eb;">disc</td><td style="padding:5px; border:1px solid #e5e7eb;">DISCOVER</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">34</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">5/2</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,383</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€953</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">21.74%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">17.22%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">79% ⚠</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.016%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.013%</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">8</td><td style="padding:5px; border:1px solid #e5e7eb;">MX</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">BANCO PLATA</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">33</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1/5</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,185</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€880</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">21.04%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">2.13%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">10%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.016%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.012%</td></tr>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">9</td><td style="padding:5px; border:1px solid #e5e7eb;">US/UT</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">CAPITAL ONE</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">36</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1/7</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,843</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€973</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">20.10%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">3.57%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">18%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.018%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.014%</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">10</td><td style="padding:5px; border:1px solid #e5e7eb;">US/NC</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">CITI COSTCO</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">30</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">2/4</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€3,853</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€773</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">20.07%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">9.87%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">49%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.014%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.011%</td></tr>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">11</td><td style="padding:5px; border:1px solid #e5e7eb;">US/IN</td><td style="padding:5px; border:1px solid #e5e7eb;">disc</td><td style="padding:5px; border:1px solid #e5e7eb;">DISCOVER ISSUER</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">32</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">3/2</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,084</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€805</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">19.71%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">15.01%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">76% ⚠</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.015%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.012%</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">12</td><td style="padding:5px; border:1px solid #e5e7eb;">US/MA</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">CAPITAL ONE</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">84</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1/9</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€11,991</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€2,257</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">18.82%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">6.90%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">37%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.044%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.036%</td></tr>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">13</td><td style="padding:5px; border:1px solid #e5e7eb;">US/AZ</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">CITI COSTCO</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">59</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">3/9</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€7,386</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,345</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">18.22%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">6.78%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">37%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.027%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.022%</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">14</td><td style="padding:5px; border:1px solid #e5e7eb;">US/IA</td><td style="padding:5px; border:1px solid #e5e7eb;">disc</td><td style="padding:5px; border:1px solid #e5e7eb;">DISCOVER</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">32</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1/4</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,753</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€855</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">17.98%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">9.92%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">55%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.018%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.014%</td></tr>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">15</td><td style="padding:5px; border:1px solid #e5e7eb;">BR</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">BANCO XP</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">45</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0/9</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,829</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€855</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">17.70%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.018%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.015%</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">16</td><td style="padding:5px; border:1px solid #e5e7eb;">MX</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">BANAMEX</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">94</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1/13</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€11,263</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,989</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">17.66%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1.49%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">8%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.042%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.034%</td></tr>
+        <tr style="background:#fef2f2;"><td style="padding:5px; border:1px solid #e5e7eb;">17</td><td style="padding:5px; border:1px solid #e5e7eb;">US/IL</td><td style="padding:5px; border:1px solid #e5e7eb;">disc</td><td style="padding:5px; border:1px solid #e5e7eb;">DISCOVER</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">72</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">6/5</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€9,402</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,649</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">17.54%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">12.36%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d; font-weight:700;">70% ⚠</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.035%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.029%</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">18</td><td style="padding:5px; border:1px solid #e5e7eb;">BR</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">MERCADO PAGO</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">45</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">2/7</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,738</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€821</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">17.33%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">3.32%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">19%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.018%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.014%</td></tr>
+        <tr style="background:#fee2e2; font-weight:700;"><td style="padding:5px; border:1px solid #e5e7eb;">19 ⭐</td><td style="padding:5px; border:1px solid #e5e7eb;">BR</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">ITAU</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">177</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0/38</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€20,638</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€3,552</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">17.21%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.076%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.063%</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">20</td><td style="padding:5px; border:1px solid #e5e7eb;">US/MI</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">CITI COSTCO</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">77</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">2/10</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€9,562</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,582</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">16.55%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">2.32%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">14%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.035%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.030%</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <details style="margin-top:16px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:12px;">
+      <summary style="cursor:pointer; font-weight:600; font-size:13px; color:#374151;">SQL — CREATE-only deep-dive query</summary>
+<pre style="margin:12px 0 0; font-family:'SF Mono',Monaco,Consolas,monospace; font-size:12px; background:#1f2937; color:#e5e7eb; padding:14px; border-radius:6px; overflow-x:auto;">SELECT
+    country, state_norm AS state, brand, issuer_raw AS issuer,
+    countIf(event_type = 'REVENUE') AS tx_count,
+    countIf(event_type = 'DISP')    AS disp_count,
+    countIf(event_type = 'REFUND')  AS refund_count,
+    round(sumIf(amt, event_type = 'REVENUE'), 2)                   AS revenue_eur,
+    round(sumIf(amt, event_type = 'DISP'),    2)                   AS disp_eur,
+    round(sumIf(amt, event_type = 'REFUND'),  2)                   AS refund_eur,
+    round(sumIf(amt, event_type IN ('DISP','REFUND')), 2)          AS loss_eur,
+    round(sumIf(amt, event_type IN ('DISP','REFUND'))
+          / sumIf(amt, event_type = 'REVENUE') * 100, 2)           AS loss_rate_pct,
+    round(sumIf(amt, event_type = 'DISP')
+          / sumIf(amt, event_type = 'REVENUE') * 100, 2)           AS disp_rate_pct,
+    round(sumIf(amt, event_type = 'DISP')
+          / nullIf(sumIf(amt, event_type IN ('DISP','REFUND')), 0) * 100, 2)
+                                                                   AS combo_disp_share_pct,
+    round(sumIf(amt, event_type = 'REVENUE') * 100 / 27025796.0, 4) AS revenue_pct_of_create,
+    round((sumIf(amt, event_type IN ('DISP','REFUND')) - sumIf(amt, event_type = 'REVENUE'))
+          * 100 / 27025796.0, 4)                                    AS net_loss_pct_of_create
+FROM (
+    SELECT 'REVENUE' AS event_type,
+           a.country, if(a.country IN ('US','CA'), a.state, NULL) AS state_norm,
+           pm.card_brand AS brand, pm.issuer AS issuer_raw,
+           t.amount * t.exchange_rate / 100 AS amt
+    FROM qrcode_data.transactions t FINAL
+    JOIN qrcode_data.payment_methods pm FINAL ON pm.id = t.payment_method_id
+    JOIN qrcode_data.accounts a FINAL ON a.id = t.account_id
+    WHERE t.status = 'succeeded' AND t.description = 'Subscription create'
+
+    UNION ALL
+
+    SELECT if(c.type = 'dispute', 'DISP', 'REFUND'),
+           a.country, if(a.country IN ('US','CA'), a.state, NULL),
+           pm.card_brand, pm.issuer, c.amount * c.exchange_rate / 100
+    FROM qrcode_data.chargebacks c FINAL
+    JOIN qrcode_data.transactions t FINAL ON t.id = c.transaction_id
+    JOIN qrcode_data.payment_methods pm FINAL ON pm.id = t.payment_method_id
+    JOIN qrcode_data.accounts a FINAL ON a.id = t.account_id
+    WHERE t.description = 'Subscription create'
+      AND NOT (c.type = 'dispute' AND c.status = 'won')
+      AND NOT (c.type IN ('refund','partial_refund') AND c.status = 'failed')
+)
+GROUP BY country, state_norm, brand, issuer_raw
+HAVING tx_count >= 30 AND revenue_eur >= 3000 AND loss_eur > 0
+ORDER BY loss_rate_pct DESC LIMIT 30;</pre>
+    </details>
+  </section>
+
+  <!-- RENEW-ONLY -->
+  <section style="background:white; padding:28px; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <h2 style="margin:0 0 8px; font-size:20px; color:#111827; border-left:4px solid #f59e0b; padding-left:12px;">RENEW-only ranking (top 11, loss_rate DESC)</h2>
+    <p style="margin:0 0 12px; color:#6b7280; font-size:13px;">
+      Renew "free money"dir — bloklamaq bahalı. Buradakı combo-lar daha çox <strong>watchlist</strong> kandidatları, BLOCK deyil.
+      <code>net % of renew</code> = bloklasaq itirəcəyimiz xalis %.
+    </p>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:11px;">
+      <thead>
+        <tr style="background:#f9fafb;">
+          <th style="padding:6px; border:1px solid #e5e7eb; cursor:help;" title="Sıra nömrəsi (loss_rate üzrə)">#</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; cursor:help;" title="Country / State (yalnız US-CA üçün ştat)">C/St</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; cursor:help;" title="Kart şəbəkəsi">Brand</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; cursor:help;" title="Kartı verən bank">Issuer</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Uğurlu RENEW transaction sayı">Tx</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Disp count / Refund count — bank chargeback sayı və refund sayı">Disp/Ref</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Bu combo RENEW revenue EUR cəmi">Rev EUR</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Total loss EUR (dispute + refund)">Loss EUR</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Total loss rate = loss / revenue × 100. RENEW platform ortalaması 8.74% (CREATE-dən yüksək!)">Rate</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Combo daxili: total loss-un nə qədər %-i bank dispute-dur (qalanı refund). 60%+ = Stripe ratio təhdidi">Disp share</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Bu combo revenue total RENEW revenue (€2.7M) içindəki payı %-lə. Renew kiçikdir, ona görə paylar daha yüksək görünə bilər">Rev % of renew</th>
+          <th style="padding:6px; border:1px solid #e5e7eb; text-align:right; cursor:help;" title="Bloklasaq xalis itki: (loss − revenue) / total RENEW revenue × 100. Renew bloklamaq daha bahalıdır — free money itirik">Net % of renew</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:#fefce8;"><td style="padding:5px; border:1px solid #e5e7eb;">1</td><td style="padding:5px; border:1px solid #e5e7eb;">AU</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">COMMONWEALTH</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">32</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">5/6</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€3,881</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,099</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#a16207; font-weight:700;">28.32%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">46%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.143%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.103%</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">2</td><td style="padding:5px; border:1px solid #e5e7eb;">US/CA</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">BoA Consumer Credit</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">43</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0/12</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€6,016</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,601</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#a16207; font-weight:700;">26.61%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.222%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.163%</td></tr>
+        <tr style="background:#fefce8;"><td style="padding:5px; border:1px solid #e5e7eb;">3</td><td style="padding:5px; border:1px solid #e5e7eb;">US/NY</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">CAPITAL ONE</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">31</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">2/6</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,109</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€946</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#a16207; font-weight:700;">23.01%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">22%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.152%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.117%</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">4</td><td style="padding:5px; border:1px solid #e5e7eb;">US/TX</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">CITIBANK</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">63</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1/13</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€8,044</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,809</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#a16207; font-weight:700;">22.49%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">6%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.297%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.230%</td></tr>
+        <tr style="background:#fefce8;"><td style="padding:5px; border:1px solid #e5e7eb;">5</td><td style="padding:5px; border:1px solid #e5e7eb;">US/GA</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">JPMORGAN CHASE</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">43</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">1/9</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€5,522</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,238</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#a16207; font-weight:700;">22.43%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">18%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.204%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.158%</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">6</td><td style="padding:5px; border:1px solid #e5e7eb;">US/NC</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">CITIBANK</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">31</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0/7</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,379</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€974</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#a16207; font-weight:700;">22.25%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.162%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.126%</td></tr>
+        <tr style="background:#fefce8;"><td style="padding:5px; border:1px solid #e5e7eb;">7</td><td style="padding:5px; border:1px solid #e5e7eb;">US/NY</td><td style="padding:5px; border:1px solid #e5e7eb;">mc</td><td style="padding:5px; border:1px solid #e5e7eb;">CAPITAL ONE</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">31</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">2/4</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€3,915</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€799</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#a16207;">20.40%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">43%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.145%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.115%</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">8</td><td style="padding:5px; border:1px solid #e5e7eb;">US/IL</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">CHASE DEBIT</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">51</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">7/5</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€6,492</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,308</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#a16207;">20.15%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7f1d1d;">57% ⚠</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.240%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.192%</td></tr>
+        <tr style="background:#fefce8;"><td style="padding:5px; border:1px solid #e5e7eb;">9</td><td style="padding:5px; border:1px solid #e5e7eb;">US/NC</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">SECU</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">41</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0/9</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€5,488</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,091</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#a16207;">19.88%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.203%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.162%</td></tr>
+        <tr><td style="padding:5px; border:1px solid #e5e7eb;">10</td><td style="padding:5px; border:1px solid #e5e7eb;">US/VA</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">JPMORGAN CHASE</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">64</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">4/6</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€9,001</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€1,767</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#a16207;">19.64%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">30%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">0.332%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed;">−0.267%</td></tr>
+        <tr style="background:#fefce8;"><td style="padding:5px; border:1px solid #e5e7eb;">11</td><td style="padding:5px; border:1px solid #e5e7eb;">US/CA</td><td style="padding:5px; border:1px solid #e5e7eb;">visa</td><td style="padding:5px; border:1px solid #e5e7eb;">CHASE DEBIT</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">167</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">4/33</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€23,486</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">€4,334</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#a16207;">18.45%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right;">11%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; font-weight:700;">0.867%</td><td style="padding:5px; border:1px solid #e5e7eb; text-align:right; color:#7c3aed; font-weight:700;">−0.707%</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <details style="margin-top:16px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:12px;">
+      <summary style="cursor:pointer; font-weight:600; font-size:13px; color:#374151;">SQL — RENEW-only ranking query</summary>
+<pre style="margin:12px 0 0; font-family:'SF Mono',Monaco,Consolas,monospace; font-size:12px; background:#1f2937; color:#e5e7eb; padding:14px; border-radius:6px; overflow-x:auto;">SELECT
+    country, state_norm AS state, brand, issuer_raw AS issuer,
+    countIf(event_type = 'REVENUE') AS tx_count,
+    countIf(event_type = 'DISP')    AS disp_count,
+    countIf(event_type = 'REFUND')  AS refund_count,
+    round(sumIf(amt, event_type = 'REVENUE'), 2)                   AS revenue_eur,
+    round(sumIf(amt, event_type = 'DISP'),    2)                   AS disp_eur,
+    round(sumIf(amt, event_type = 'REFUND'),  2)                   AS refund_eur,
+    round(sumIf(amt, event_type IN ('DISP','REFUND')), 2)          AS loss_eur,
+    round(sumIf(amt, event_type IN ('DISP','REFUND'))
+          / sumIf(amt, event_type = 'REVENUE') * 100, 2)           AS loss_rate_pct,
+    round(sumIf(amt, event_type = 'DISP')
+          / nullIf(sumIf(amt, event_type IN ('DISP','REFUND')), 0) * 100, 2)
+                                                                   AS combo_disp_share_pct,
+    round(sumIf(amt, event_type = 'REVENUE') * 100 / 2707526.0, 4) AS revenue_pct_of_renew,
+    round((sumIf(amt, event_type IN ('DISP','REFUND')) - sumIf(amt, event_type = 'REVENUE'))
+          * 100 / 2707526.0, 4)                                    AS net_loss_pct_of_renew
+FROM (
+    SELECT 'REVENUE' AS event_type,
+           a.country, if(a.country IN ('US','CA'), a.state, NULL) AS state_norm,
+           pm.card_brand AS brand, pm.issuer AS issuer_raw,
+           t.amount * t.exchange_rate / 100 AS amt
+    FROM qrcode_data.transactions t FINAL
+    JOIN qrcode_data.payment_methods pm FINAL ON pm.id = t.payment_method_id
+    JOIN qrcode_data.accounts a FINAL ON a.id = t.account_id
+    WHERE t.status = 'succeeded' AND t.description = 'Subscription renew'
+
+    UNION ALL
+
+    SELECT if(c.type = 'dispute', 'DISP', 'REFUND'),
+           a.country, if(a.country IN ('US','CA'), a.state, NULL),
+           pm.card_brand, pm.issuer, c.amount * c.exchange_rate / 100
+    FROM qrcode_data.chargebacks c FINAL
+    JOIN qrcode_data.transactions t FINAL ON t.id = c.transaction_id
+    JOIN qrcode_data.payment_methods pm FINAL ON pm.id = t.payment_method_id
+    JOIN qrcode_data.accounts a FINAL ON a.id = t.account_id
+    WHERE t.description = 'Subscription renew'
+      AND NOT (c.type = 'dispute' AND c.status = 'won')
+      AND NOT (c.type IN ('refund','partial_refund') AND c.status = 'failed')
+)
+GROUP BY country, state_norm, brand, issuer_raw
+HAVING tx_count >= 30 AND revenue_eur >= 3000 AND loss_eur > 0
+ORDER BY loss_rate_pct DESC LIMIT 20;</pre>
+    </details>
+  </section>
+
+  <!-- ACTION FRAMEWORK -->
+  <section style="background:white; padding:28px; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <h2 style="margin:0 0 12px; font-size:20px; color:#111827; border-left:4px solid #8b5cf6; padding-left:12px;">Action framework (weighted_score əsasında)</h2>
+    <table style="width:100%; border-collapse:collapse; font-size:14px;">
+      <thead>
+        <tr style="background:#f9fafb;">
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:left;">Score</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:left;">Sub_type</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:left;">Rate</th>
+          <th style="padding:10px; border:1px solid #e5e7eb; text-align:left;">Aksiya</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:#fef2f2;"><td style="padding:10px; border:1px solid #e5e7eb;"><strong>≥ 30</strong></td><td style="padding:10px; border:1px solid #e5e7eb;">create</td><td style="padding:10px; border:1px solid #e5e7eb;">≥ 20%</td><td style="padding:10px; border:1px solid #e5e7eb;"><strong>BLOCK</strong> — gateway selector DISABLE et. Mandatory 3DS pressure.</td></tr>
+        <tr><td style="padding:10px; border:1px solid #e5e7eb;"><strong>20–30</strong></td><td style="padding:10px; border:1px solid #e5e7eb;">create</td><td style="padding:10px; border:1px solid #e5e7eb;">13–20%</td><td style="padding:10px; border:1px solid #e5e7eb;"><strong>HARD WATCHLIST</strong> — 3DS mandatory, AVS strict, CVV.</td></tr>
+        <tr style="background:#fefce8;"><td style="padding:10px; border:1px solid #e5e7eb;"><strong>15–25</strong></td><td style="padding:10px; border:1px solid #e5e7eb;">renew</td><td style="padding:10px; border:1px solid #e5e7eb;">15–25%</td><td style="padding:10px; border:1px solid #e5e7eb;"><strong>SOFT WATCHLIST</strong> — 3DS challenge, retry strategy review.</td></tr>
+        <tr><td style="padding:10px; border:1px solid #e5e7eb;"><strong>8–15</strong></td><td style="padding:10px; border:1px solid #e5e7eb;">hər ikisi</td><td style="padding:10px; border:1px solid #e5e7eb;">5–10%</td><td style="padding:10px; border:1px solid #e5e7eb;">Standard flow — adi monitoring.</td></tr>
+        <tr style="background:#f0fdf4;"><td style="padding:10px; border:1px solid #e5e7eb;"><strong>&lt; 8</strong></td><td style="padding:10px; border:1px solid #e5e7eb;">hər ikisi</td><td style="padding:10px; border:1px solid #e5e7eb;">&lt; 5%</td><td style="padding:10px; border:1px solid #e5e7eb;"><strong>FAST-LANE</strong> — 3DS exempt, conversion artırmaq.</td></tr>
+      </tbody>
+    </table>
+    <p style="margin:16px 0 0; color:#6b7280; font-size:13px;">
+      ⚠ <strong>Disp share &gt; 60%</strong> olan combo-lar HƏMİŞƏ 3DS-mandatory, çünki Stripe chargeback ratio təhdidi var (4 ay ardıcıl &gt;0.7% = restriction). Bu, score-dan asılı deyil.
+    </p>
+  </section>
+
+  <!-- INSIGHTS -->
+  <section style="background:white; padding:28px; border-radius:12px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <h2 style="margin:0 0 12px; font-size:20px; color:#111827; border-left:4px solid #8b5cf6; padding-left:12px;">Əsas tapıntılar</h2>
+    <ul style="margin:0; padding-left:24px; color:#374151;">
+      <li><strong>BR Nubank create</strong> tək başına €20K loss — 99.6% refund pattern (chargeback911/prevention triggerlər), bank dispute yox. <strong>Tövsiyə:</strong> friction artır (CVV strict, AVS strict, 3DS challenge) — block etmə çünki €71K revenue.</li>
+      <li><strong>BR Itaú create</strong> €3.5K loss, 100% refund, 0.076% revenue payı — eyni pattern, refund-heavy. Bütün BR banklarında oxşar.</li>
+      <li><strong>US Discover ştat-larda (WI, IN, IL)</strong> bank-dispute heavy (70-79% disp share). <strong>Tövsiyə:</strong> BLOCK + mandatory 3DS — chargeback ratio təhdidi.</li>
+      <li><strong>US Capital One ştat-larda</strong> mixed (37-50% disp). 8 fərqli combo top 30-da (MA, MT, NY, UT, NC). Issuer-wide 3DS pressure tətbiq etmək olar.</li>
+      <li><strong>Citi Costco (NC, AZ, MI, WI, TX)</strong> 5 combo top 30-da, 14-37% disp share. Costco-spesifik anti-fraud pattern var.</li>
+      <li><strong>Renew-larda dispute rate yüksəkdir</strong> (8.74% vs 4.85%) AMMA renew bloklamaq daha bahalıdır (free money). Renew watchlist üçün 3DS challenge ilə kifayətlən.</li>
+      <li><strong>FR/CH/DE/BE/IT premium banklar</strong> &lt;1% rate — fast-lane (3DS exempt) imkanı var, conversion artırılması mümkündür.</li>
+    </ul>
+  </section>
+
+  <footer style="text-align:center; color:#9ca3af; font-size:13px; padding:20px 0;">
+    Source query-lər: <code>database/block-rank-analysis.sql</code><br>
+    Volume floor: tx_count ≥ 30, revenue ≥ €3,000, loss > 0<br>
+    Create weight: 1.5× · Renew weight: 1.0× · Platform avg loss rate: 5.21%
+  </footer>
+
+</div>
+
+</body>
+</html>
